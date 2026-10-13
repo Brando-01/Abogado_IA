@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#142a3a">
+  <title>AbogadoIA · Demo de alimentos</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./bootstrap.js" type="module"></script>
+</head>
+<body>
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <div class="brand auth-brand"><div class="brand-mark">A<span>+</span></div><div><strong>AbogadoIA</strong><small>Laboratorio legal · Perú</small></div></div>
+      <span class="section-kicker">ACCESO LOCAL</span><h1 id="auth-title">Preparando el espacio</h1>
+      <p id="auth-description">Cargando configuración…</p>
+      <form id="auth-form"><label class="field"><span>Correo electrónico</span><input name="email" type="email" autocomplete="username" required></label><label class="field"><span>Contraseña</span><input name="password" type="password" autocomplete="current-password" minlength="12" required></label><button id="auth-button" class="button button-primary" type="submit">Continuar →</button></form>
+      <p id="auth-error" class="auth-error" role="alert"></p>
+      <small>Los casos se guardan cifrados en este equipo. Usa datos ficticios durante la validación jurídica.</small>
+    </div>
+  </div>
+  <div id="app-shell" class="app-shell" hidden>
+    <aside class="sidebar" aria-label="Navegación de la demo">
+      <div class="brand"><div class="brand-mark">A<span>+</span></div><div><strong>AbogadoIA</strong><small>Laboratorio legal · Perú</small></div></div>
+      <div class="sidebar-label">PROCEDIMIENTO PILOTO</div>
+      <div class="procedure-chip"><span class="chip-dot"></span> Alimentos para menores</div>
+      <nav class="steps" aria-label="Pasos del caso">
+        <button type="button" data-step-button="0" class="step active"><span>01</span> Alcance</button>
+        <button type="button" data-step-button="1" class="step"><span>02</span> Personas</button>
+        <button type="button" data-step-button="2" class="step"><span>03</span> Menor</button>
+        <button type="button" data-step-button="3" class="step"><span>04</span> Solicitud</button>
+        <button type="button" data-step-button="4" class="step"><span>05</span> Revisión</button>
+      </nav>
+      <div class="sidebar-cases"><div class="sidebar-label">CASOS GUARDADOS</div><div id="cases-list" class="cases-list"></div></div>
+      <div class="sidebar-bottom">
+        <span class="status-pill">● Solo demostración</span>
+        <p>Los casos se guardan localmente. La app no presenta demandas ante el Poder Judicial.</p>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar"><span>EDITOR ALTERNATIVO <span class="top-separator">/</span> DEMANDA DE ALIMENTOS</span><div class="top-actions"><a id="return-chat" href="/">← Volver al chat</a><button id="new-case-button" type="button">+ Nuevo caso</button><button id="save-case-button" type="button">Guardar</button><button id="logout-button" type="button">Salir</button><span class="top-version">v0.3</span></div></div>
+      <div class="content">
+        <header class="page-head">
+          <div class="eyebrow">ASISTENTE DE PREPARACIÓN</div>
+          <h1>Prepara un caso de prueba,<br><em>paso a paso.</em></h1>
+          <p>Explora cómo funcionaría la entrevista y la revisión de un borrador. Usa únicamente nombres, direcciones y documentos inventados.</p>
+        </header>
+        <div class="notice"><span class="notice-icon">!</span><div><strong>Entorno de simulación</strong><p>Las fuentes están cargadas, pero sus artículos, vigencia y formularios aún no tienen aprobación jurídica para generar demandas reales.</p></div></div>
+        <div class="system-strip"><span id="save-status">Caso nuevo sin guardar</span><span id="index-status">Preparando biblioteca…</span><span id="groq-status">Groq: comprobando…</span></div>
+
+        <form id="case-form" novalidate>
+          <section class="panel step-panel" data-step="0">
+            <div class="section-top"><div><span class="section-kicker">PASO 01 / 05</span><h2>Comprobemos el alcance</h2><p>El piloto contempla una demanda inicial de alimentos para una persona menor de edad.</p></div><span class="section-glyph">01</span></div>
+            <div class="field-grid">
+              <label class="field full"><span>Procedimiento</span><select name="procedure"><option value="ALIMENTOS_NNA">Demanda inicial de alimentos para menor</option><option value="OTRO">Otro procedimiento</option></select></label>
+              <label class="field"><span>Relación de quien presenta la demanda con el menor</span><select name="applicantRelation"><option value="">Seleccionar</option><option value="madre">Madre</option><option value="padre">Padre</option><option value="tutor">Tutor u otra persona</option></select></label>
+              <div class="field"><span>¿Incluye filiación, tenencia u otra pretensión?</span><div class="segmented"><label><input type="radio" name="otherClaims" value="no" checked><span>No</span></label><label><input type="radio" name="otherClaims" value="yes"><span>Sí</span></label></div></div>
+              <div class="field"><span>¿Hay una situación urgente o de riesgo?</span><div class="segmented"><label><input type="radio" name="urgentRisk" value="no" checked><span>No</span></label><label><input type="radio" name="urgentRisk" value="yes"><span>Sí</span></label></div></div>
+              <label class="check-row full"><input type="checkbox" name="isFictional"><span>Confirmo que todos los datos que usaré son ficticios. Entiendo que el resultado será solo una simulación.</span></label>
+            </div>
+          </section>
+
+          <section class="panel step-panel" data-step="1" hidden>
+            <div class="section-top"><div><span class="section-kicker">PASO 02 / 05</span><h2>Identifica a las personas</h2><p>Escribe datos inventados para probar el flujo. No pegues DNI ni direcciones reales.</p></div><span class="section-glyph">02</span></div>
+            <div class="field-group"><h3>Quien presenta la solicitud</h3><div class="field-grid">
+              <label class="field"><span>Nombre completo <b>*</b></span><input name="applicantName" maxlength="120" placeholder="Ej. Ana Ejemplo Salazar"></label>
+              <label class="field"><span>Documento ficticio <b>*</b></span><input name="applicantDocument" maxlength="30" placeholder="Ej. DEMO12345"></label>
+              <label class="field full"><span>Domicilio ficticio <b>*</b></span><input name="applicantAddress" maxlength="220" placeholder="Ej. Calle Ficticia 100, Lima"></label>
+            </div></div>
+            <div class="field-group"><h3>Persona demandada</h3><div class="field-grid">
+              <label class="field"><span>Nombre completo <b>*</b></span><input name="respondentName" maxlength="120" placeholder="Ej. Bruno Ejemplo Torres"></label>
+              <label class="field"><span>Domicilio conocido</span><input name="respondentAddress" maxlength="220" placeholder="Ej. Av. Simulada 250, Lima"></label>
+              <label class="check-row full"><input type="checkbox" name="respondentAddressUnknown"><span>No conozco el domicilio de la persona demandada</span></label>
+            </div></div>
+          </section>
+
+          <section class="panel step-panel" data-step="2" hidden>
+            <div class="section-top"><div><span class="section-kicker">PASO 03 / 05</span><h2>Datos de las personas menores</h2><p>Puedes registrar hasta cinco menores en una misma solicitud de prueba.</p></div><span class="section-glyph">03</span></div>
+            <div class="field-grid child-row">
+              <label class="field"><span>Nombre completo ficticio <b>*</b></span><input name="childName" maxlength="120" placeholder="Ej. Carla Ejemplo Salazar"></label>
+              <label class="field"><span>Fecha de nacimiento <b>*</b></span><input type="date" name="childBirthDate"></label>
+            </div>
+            <div id="additional-children"></div><button id="add-child-button" type="button" class="button button-secondary add-child-button">+ Añadir menor</button>
+            <div class="info-line">Los datos de menores requieren controles especiales de privacidad. La demo no permite adjuntar partidas de nacimiento reales.</div>
+          </section>
+
+          <section class="panel step-panel" data-step="3" hidden>
+            <div class="section-top"><div><span class="section-kicker">PASO 04 / 05</span><h2>Describe la solicitud</h2><p>La herramienta organiza lo que declaras; no calcula ni recomienda una pensión.</p></div><span class="section-glyph">04</span></div>
+            <div class="field-grid">
+              <label class="field"><span>Monto mensual total solicitado en soles <b>*</b></span><input type="number" name="requestedAmount" min="0.01" step="0.01" placeholder="Ej. 850.00"></label>
+              <label class="field full"><span>Hechos que sustentan la solicitud <b>*</b></span><textarea name="factDescription" maxlength="1600" rows="5" placeholder="Describe solo hechos conocidos por la persona solicitante."></textarea></label>
+              <label class="field full"><span>Necesidades y gastos del menor <b>*</b></span><textarea name="expenseDescription" maxlength="1200" rows="4" placeholder="Alimentación, vivienda, educación, salud u otros gastos declarados."></textarea></label>
+              <label class="field full"><span>Medios probatorios disponibles</span><textarea name="evidenceText" maxlength="1800" rows="3" placeholder="Uno por línea. Ej.: comprobantes ficticios de gastos"></textarea><small>Describe los documentos y adjunta los archivos ficticios en el paso de revisión.</small></label>
+            </div>
+            <div class="ai-area"><button id="ai-button" type="button" class="button button-secondary">Pedir sugerencia a Groq</button><div id="ai-result" aria-live="polite"></div></div>
+          </section>
+
+          <section class="panel step-panel" data-step="4" hidden>
+            <div class="section-top"><div><span class="section-kicker">PASO 05 / 05</span><h2>Revisa antes de generar</h2><p>El verificador mostrará información faltante, alertas y motivos para detener el flujo.</p></div><span class="section-glyph">05</span></div>
+            <div id="evaluation" class="evaluation" aria-live="polite"></div>
+            <div class="attachment-area"><h3>Anexos del caso</h3><p>Adjunta solo PDF, PNG o JPEG ficticios, hasta 5 MB por archivo.</p><input id="document-input" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"><div id="document-list"></div></div>
+            <label class="check-row"><input name="reviewConfirmed" type="checkbox"><span>He revisado el resumen y confirmo que los datos ficticios reflejan lo declarado. Autorizo generar solo un PDF de simulación.</span></label>
+            <div class="review-actions"><button id="evaluate-button" type="button" class="button button-secondary">Actualizar revisión</button><button id="draft-button" type="button" class="button button-primary">Crear borrador de simulación <span>→</span></button></div>
+          </section>
+          <div class="form-nav"><button id="prev-button" type="button" class="button button-plain" hidden>← Anterior</button><span id="step-count">Paso 1 de 5</span><button id="next-button" type="button" class="button button-primary">Siguiente <span>→</span></button></div>
+        </form>
+
+        <section id="draft-section" class="draft-wrap" hidden><div class="draft-heading"><div><span class="section-kicker">RESULTADO DE DEMOSTRACIÓN</span><h2>Borrador para revisar</h2></div><button id="pdf-button" type="button" class="button button-secondary">Descargar PDF</button></div><div id="draft-content" class="draft-paper"></div><div id="references-list" class="references-list"></div></section>
+
+        <section class="sources-wrap"><div class="sources-heading"><div><span class="section-kicker">BIBLIOTECA DEL PILOTO</span><h2>Fuentes disponibles</h2><p>La carpeta de leyes se indexa por página. La presencia de un PDF no confirma la vigencia de sus artículos.</p></div><button id="reindex-button" type="button" class="button button-secondary">Actualizar biblioteca</button></div><div class="source-search"><input id="source-query" type="search" placeholder="Buscar en todos los PDF: alimentos, artículo 164…"><button id="source-search-button" type="button" class="button button-secondary">Buscar</button></div><div id="search-results"></div><div id="sources-list" class="sources-list">Cargando archivos…</div></section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,12 @@
+# Credenciales y datos privados generados por la aplicación
+mvp/.env
+mvp/private/
+
+# Dependencias, cachés y archivos generados
+mvp/node_modules/
+mvp/.pnpm-store/
+mvp/output/
+mvp/tmp/
+*.log
+.DS_Store
+Thumbs.db

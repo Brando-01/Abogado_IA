@@ -1,0 +1,16 @@
+{
+  "name": "abogadoia-mvp",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test",
+    "ingest": "node scripts/ingest.mjs"
+  },
+  "engines": { "node": ">=24" },
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^5.6.205"
+  }
+}

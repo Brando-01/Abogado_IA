@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#142a3a">
+  <title>AbogadoIA · Conversación</title>
+  <link rel="stylesheet" href="./chat.css">
+  <script src="./bootstrap.js" type="module"></script>
+</head>
+<body data-app-module="chat.js" data-mode="qa">
+  <section id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <div class="brand"><span class="brand-mark">A+</span><div><strong>AbogadoIA</strong><small>Laboratorio legal · Perú</small></div></div>
+      <span class="eyebrow">ACCESO LOCAL</span>
+      <h1 id="auth-title">Preparando el espacio</h1>
+      <p id="auth-description">Cargando configuración…</p>
+      <form id="auth-form">
+        <label>Correo electrónico<input name="email" type="email" autocomplete="username" required></label>
+        <label>Contraseña<input name="password" type="password" autocomplete="current-password" minlength="12" required></label>
+        <button id="auth-button" class="primary" type="submit">Continuar →</button>
+      </form>
+      <p id="auth-error" class="error" role="alert"></p>
+      <small>Solo datos ficticios. Los casos se guardan cifrados en este equipo.</small>
+    </div>
+  </section>
+
+  <div id="workspace" class="workspace" hidden>
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">A+</span><div><strong>AbogadoIA</strong><small>Asistente conversacional</small></div></div>
+      <button id="qa-mode" class="new-case" type="button">💬 Consultar biblioteca con Groq</button>
+      <button id="new-case" class="new-case" type="button">＋ Nueva demanda de prueba</button>
+      <div class="sidebar-heading">TUS CASOS</div>
+      <div id="case-list" class="case-list"></div>
+      <div class="sidebar-foot"><span>● Simulación local</span><p>No presenta demandas ni sustituye la revisión jurídica.</p><button id="logout" type="button">Cerrar sesión</button></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar"><div><strong id="workspace-title">Consulta libre de la biblioteca</strong><span id="case-label">Conversación nueva</span></div><div class="top-actions"><a href="./formulario.html" title="Editor alternativo" class="case-only">Formulario avanzado</a><span id="groq-status">Groq: comprobando…</span></div></header>
+      <div class="layout">
+        <section class="conversation" aria-label="Conversación del caso">
+          <div class="intro"><span id="intro-eyebrow" class="eyebrow">CONSULTA LIBRE</span><h1 id="intro-title">Pregunta sobre las leyes<br><em>de tu biblioteca.</em></h1><p id="intro-description">Puedes preguntar con tus palabras. Groq recibe tu pregunta y fragmentos pertinentes de los PDF, no todos los archivos completos. Las respuestas jurídicas necesitan verificación de fuente y vigencia.</p><div class="mode-tabs"><button id="qa-tab" type="button">Consulta libre</button><button id="case-tab" type="button">Preparar demanda de prueba</button></div><p id="qa-status" class="qa-only">Comprobando índice…</p><label class="qa-consent qa-only"><input id="qa-consent" type="checkbox"> Acepto enviar mi pregunta y los extractos recuperados a Groq. No incluiré datos personales ni un expediente real.</label><button id="qa-clear" class="qa-clear qa-only" type="button">Borrar historial de consultas</button></div>
+          <div id="messages" class="messages" role="log" aria-live="polite"></div>
+          <div id="choices" class="choices"></div>
+          <form id="composer" class="composer"><label for="answer" class="sr-only">Tu respuesta</label><textarea id="answer" rows="2" maxlength="1800" placeholder="Escribe tu respuesta…"></textarea><button id="send" class="primary" type="submit">Enviar ↑</button></form>
+          <p id="chat-error" class="error" role="alert"></p>
+        </section>
+
+        <aside class="tools" aria-label="Revisión del caso">
+          <div class="tool-card case-only"><span class="eyebrow">ESTADO DEL CASO</span><h2 id="progress-title">Empecemos</h2><p id="progress-detail">Responderás una pregunta a la vez.</p><div id="checklist" class="checklist"></div></div>
+          <div class="tool-card case-only"><span class="eyebrow">REVISIÓN</span><h2>Resumen y archivos</h2><div id="summary" class="summary"></div><label class="upload">Adjuntar PDF o imagen ficticia<input id="document-input" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"></label><div id="documents"></div></div>
+          <div class="tool-card case-only"><span class="eyebrow">HERRAMIENTAS</span><p id="library-status">Leyendo biblioteca…</p><button id="draft-button" class="secondary" type="button" disabled>Ver borrador</button><button id="pdf-button" class="secondary" type="button" disabled>Descargar PDF</button><button id="groq-button" class="secondary" type="button" disabled>Pedir sugerencia a Groq</button><div id="tool-result" role="status"></div></div>
+          <div class="tool-card case-only"><span class="eyebrow">FORMATOS POR ENTIDAD</span><h2>Elegir versión</h2><label for="format-select">Entidad, destino y versión</label><select id="format-select" aria-label="Formato de presentación"></select><div id="format-detail"></div><button id="format-preview" class="secondary" type="button" disabled>Descargar vista previa</button><p class="fineprint">Solo simulación. Comprueba el juzgado competente, el canal y los anexos con un profesional antes de un trámite real.</p></div>
+          <div class="tool-card case-only"><span class="eyebrow">CONTINUAR EL TRÁMITE</span><h2>Ruta oficial para verificar</h2><p>1. Confirma el juzgado competente y la versión del formulario.<br>2. Revisa hechos, firma y anexos con asistencia jurídica.<br>3. Comprueba si tu distrito admite Mesa de Partes Electrónica o requiere mesa física.<br>4. Conserva el cargo o constancia cuando presentes el escrito.</p><p><a href="https://www.pj.gob.pe/wps/wcm/connect/eje/s_eje2/as_manuales/as_videos_tutor" target="_blank" rel="noopener noreferrer">Tutoriales oficiales de la Mesa de Partes ↗</a></p><p><a href="https://www.pj.gob.pe/wps/wcm/connect/CorteSuprema/s_cortes_suprema_home/as_servicios/as_enlaces_de_interes/as_orientacion_juridica_usuario/as_formatos/" target="_blank" rel="noopener noreferrer">Formatos oficiales del Poder Judicial ↗</a></p></div>
+          <div class="tool-card"><span class="eyebrow">BIBLIOTECA LEGAL</span><p>Los fragmentos requieren revisión jurídica. No son citas aprobadas.</p><form id="source-search"><input id="source-query" aria-label="Buscar en los PDF" placeholder="Buscar en los PDF…"><button type="submit">Buscar</button></form><button id="reindex-button" class="secondary" type="button">Actualizar biblioteca</button><div id="search-results"></div></div>
+        </aside>
+      </div>
+    </main>
+  </div>
+  <dialog id="draft-dialog"><button id="close-draft" class="dialog-close" type="button">Cerrar ×</button><div id="draft-content"></div></dialog>
+</body>
+</html>
