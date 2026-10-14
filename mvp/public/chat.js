@@ -303,7 +303,7 @@ $('#case-list').addEventListener('click', async event => {
   catch (error) { showError(error.message); }
 });
 $('#composer').addEventListener('submit', event => { event.preventDefault(); if (mode === 'qa') submitQa($('#answer').value); else submitAnswer($('#answer').value); });
-$('#answer').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (mode === 'qa') submitQa($('#answer').value); else submitAnswer($('#answer').value); } });
+$('#answer').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !window.matchMedia('(pointer: coarse)').matches) { event.preventDefault(); if (mode === 'qa') submitQa($('#answer').value); else submitAnswer($('#answer').value); } });
 $('#choices').addEventListener('click', event => { const choice = event.target.closest('[data-choice]'); if (choice) submitAnswer(choice.dataset.choice); });
 $('#summary').addEventListener('click', event => { const button = event.target.closest('[data-edit]'); if (!button) return; editing = button.dataset.edit; data.reviewConfirmed = false; data.chatCompleted = data.chatCompleted.filter(id => id !== 'review'); extras = []; render(); $('#answer').focus(); });
 $('#document-input').addEventListener('change', async event => {

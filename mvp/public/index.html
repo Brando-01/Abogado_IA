@@ -2,10 +2,12 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#142a3a">
   <title>AbogadoIA · Conversación</title>
   <link rel="stylesheet" href="./chat.css">
+  <link rel="stylesheet" href="./mobile.css">
+  <script src="./mobile.js" type="module"></script>
   <script src="./bootstrap.js" type="module"></script>
 </head>
 <body data-app-module="chat.js" data-mode="qa">
@@ -26,7 +28,8 @@
   </section>
 
   <div id="workspace" class="workspace" hidden>
-    <aside class="sidebar">
+    <aside class="sidebar" id="mobile-sidebar" aria-label="Casos y navegación">
+      <div class="mobile-drawer-heading"><span>Menú</span><button id="mobile-close-menu" class="mobile-drawer-close" type="button" aria-label="Cerrar menú">Cerrar ×</button></div>
       <div class="brand"><span class="brand-mark">A+</span><div><strong>AbogadoIA</strong><small>Asistente conversacional</small></div></div>
       <button id="qa-mode" class="new-case" type="button">💬 Consultar biblioteca con Groq</button>
       <button id="new-case" class="new-case" type="button">＋ Nueva demanda de prueba</button>
@@ -36,7 +39,7 @@
     </aside>
 
     <main class="main">
-      <header class="topbar"><div><strong id="workspace-title">Consulta libre de la biblioteca</strong><span id="case-label">Conversación nueva</span></div><div class="top-actions"><a href="./formulario.html" title="Editor alternativo" class="case-only">Formulario avanzado</a><span id="groq-status">Groq: comprobando…</span></div></header>
+      <header class="topbar"><button id="mobile-menu" class="mobile-toggle" type="button" aria-controls="mobile-sidebar" aria-expanded="false" aria-label="Abrir menú de casos">☰</button><div><strong id="workspace-title">Consulta libre de la biblioteca</strong><span id="case-label">Conversación nueva</span></div><div class="top-actions"><a href="./formulario.html" title="Editor alternativo" class="case-only">Formulario avanzado</a><span id="groq-status">Groq: comprobando…</span></div><button id="mobile-tools" class="mobile-toggle" type="button" aria-controls="mobile-tools-panel" aria-expanded="false">Opciones</button></header>
       <div class="layout">
         <section class="conversation" aria-label="Conversación del caso">
           <div class="intro"><span id="intro-eyebrow" class="eyebrow">CONSULTA LIBRE</span><h1 id="intro-title">Pregunta sobre las leyes<br><em>de tu biblioteca.</em></h1><p id="intro-description">Puedes preguntar con tus palabras. Groq recibe tu pregunta y fragmentos pertinentes de los PDF, no todos los archivos completos. Las respuestas jurídicas necesitan verificación de fuente y vigencia.</p><div class="mode-tabs"><button id="qa-tab" type="button">Consulta libre</button><button id="case-tab" type="button">Preparar demanda de prueba</button></div><p id="qa-status" class="qa-only">Comprobando índice…</p><label class="qa-consent qa-only"><input id="qa-consent" type="checkbox"> Acepto enviar mi pregunta y los extractos recuperados a Groq. No incluiré datos personales ni un expediente real.</label><button id="qa-clear" class="qa-clear qa-only" type="button">Borrar historial de consultas</button></div>
@@ -46,7 +49,9 @@
           <p id="chat-error" class="error" role="alert"></p>
         </section>
 
-        <aside class="tools" aria-label="Revisión del caso">
+        <aside class="tools" id="mobile-tools-panel" aria-label="Revisión y herramientas">
+          <div class="mobile-drawer-heading"><span>Herramientas y revisión</span><button id="mobile-close-tools" class="mobile-drawer-close" type="button" aria-label="Cerrar herramientas">Cerrar ×</button></div>
+          <a id="mobile-form-link" class="mobile-form-shortcut case-only" href="./formulario.html">Abrir formulario avanzado ↗</a>
           <div class="tool-card case-only"><span class="eyebrow">ESTADO DEL CASO</span><h2 id="progress-title">Empecemos</h2><p id="progress-detail">Responderás una pregunta a la vez.</p><div id="checklist" class="checklist"></div></div>
           <div class="tool-card case-only"><span class="eyebrow">REVISIÓN</span><h2>Resumen y archivos</h2><div id="summary" class="summary"></div><label class="upload">Adjuntar PDF o imagen ficticia<input id="document-input" type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"></label><div id="documents"></div></div>
           <div class="tool-card case-only"><span class="eyebrow">HERRAMIENTAS</span><p id="library-status">Leyendo biblioteca…</p><button id="draft-button" class="secondary" type="button" disabled>Ver borrador</button><button id="pdf-button" class="secondary" type="button" disabled>Descargar PDF</button><button id="groq-button" class="secondary" type="button" disabled>Pedir sugerencia a Groq</button><div id="tool-result" role="status"></div></div>
@@ -56,6 +61,7 @@
         </aside>
       </div>
     </main>
+    <button id="mobile-backdrop" class="mobile-backdrop" type="button" aria-label="Cerrar menú o herramientas" hidden></button>
   </div>
   <dialog id="draft-dialog"><button id="close-draft" class="dialog-close" type="button">Cerrar ×</button><div id="draft-content"></div></dialog>
 </body>
