@@ -29,6 +29,29 @@ La clave se lee solo en el servidor, se actualiza al editar `.env` y está exclu
 
 El diseño usa una conversación central, un menú de historial y un panel de documento que se abre cuando lo necesitas. En celular, el menú y el documento se presentan como paneles sobre el chat; el cuadro de mensaje permanece al pie. Los diálogos y los controles admiten teclado.
 
+## Voz y dictado
+
+En `mvp/.env`, añade tu configuración privada:
+
+```dotenv
+FISH_AUDIO_API_KEY=tu_clave
+FISH_AUDIO_VOICE_ID=id_de_tu_voz
+FISH_AUDIO_MODEL=s2.1-pro-free
+```
+
+Se admiten también `FISH_API_KEY`, `FISH_VOICE_ID` y `FISH_REFERENCE_ID`. La configuración se vuelve a leer al usar la voz. El modelo se puede cambiar a otro que admita tu cuenta y tu voz. La API de transcripción utiliza `transcribe-1-pro`, compatible con los formatos de grabación del navegador. Las llamadas pueden consumir saldo o límites de Fish Audio; que TTS tenga un modelo gratuito no implica que ASR sea gratuito.
+
+- **Voz** abre la animación. Pulsa **Iniciar conversación**, autoriza el micrófono y habla. Después de una pausa de aproximadamente 1,3 segundos se transcribe tu mensaje, se envía al mismo chat y se reproduce la respuesta con tu voz configurada. La animación muestra escucha, procesamiento y respuesta.
+- **Apagar micrófono** libera la captura; **Activar micrófono** la retoma. **Interrumpir respuesta** detiene la reproducción. **Terminar**, cerrar el diálogo, cambiar de conversación o pasar la aplicación a segundo plano detiene la interacción y libera el micrófono. Una respuesta del chat ya solicitada puede terminar y quedar guardada aunque hayas terminado la voz.
+- El botón de **micrófono** junto a **Voz** permite dictar y pulsar **Usar dictado**. El texto queda en el cuadro de mensaje para revisarlo y enviarlo con el botón habitual.
+- Si el navegador bloquea la reproducción automática, pulsa **Escuchar respuesta**. Si deniega el micrófono, habilítalo en sus permisos.
+
+La interacción es continua **por turnos**, con latencia de transcripción, Groq y síntesis; no es audio bidireccional simultáneo. La captura se pausa mientras se procesa o reproduce una respuesta. Cada grabación dura hasta 45 segundos y tiene un límite de 5 MB. El audio se procesa en memoria, sin guardarlo en SQLite ni en archivos. Fish Audio recibe el audio y el texto de las respuestas; Groq recibe el texto mediante el flujo habitual del chat. El manejo de datos de esos proveedores depende de sus políticas. Las transcripciones pueden equivocarse: revisa los datos del documento antes de confirmarlos.
+
+Usa un navegador actualizado con micrófono (Chrome, Edge o Safari). En esta computadora funciona con `localhost` o `127.0.0.1`. **En un celular conectado por una dirección IP local necesitas HTTPS** para que el navegador habilite el micrófono. No basta con abrir una IP por HTTP. No hay que instalar paquetes de audio, PostgreSQL ni convertir las grabaciones manualmente.
+
+Contratos de API: [transcripción de Fish Audio](https://docs.fish.audio/features/speech-to-text) y [síntesis de voz](https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech).
+
 ## Cómo funciona el RAG
 
 1. El servidor lee los PDF de `../Data de Leyes`, extrae texto por página y lo divide en fragmentos con un pequeño solapamiento.

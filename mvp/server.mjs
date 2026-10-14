@@ -2,7 +2,10 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getConfig, getGroqConfig, PROJECT_ROOT } from './src/config.mjs';
+import { getConfig, getGroqConfig, getVoiceConfig, PROJECT_ROOT } from './src/config.mjs';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { AUDIO_LIMIT, audioFormat, transcribeAudio, synthesizeAnswer } from './src/services/voice.mjs';
 import { Store } from './src/storage.mjs';
 import { normalizeCase, evaluateCase, createDraft } from './src/procedure.mjs';
 import { getLegalCatalog } from './src/legal-catalog.mjs';
@@ -58,6 +61,8 @@ export function createServer(overrides = {}) {
   const config = { ...getConfig(), ...overrides };
   const store = new Store(config);
   const activeMessages = new Set();
+  const activeVoice = new Set();
+  const currentVoiceConfig = () => ({ ...getVoiceConfig(), ...Object.fromEntries(['fishApiKey', 'fishVoiceId', 'fishModel'].filter(key => Object.hasOwn(overrides, key)).map(key => [key, overrides[key]])) });
   const currentGroqConfig = () => ({
     ...getGroqConfig(),
     ...(Object.hasOwn(overrides, 'groqApiKey') ? { groqApiKey: overrides.groqApiKey } : {}),
@@ -66,14 +71,16 @@ export function createServer(overrides = {}) {
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url || '/', `http://${config.host}:${config.port}`), route = url.pathname;
-      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'");
+      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'");
+      res.setHeader('Permissions-Policy', 'microphone=(self), camera=()');
       res.setHeader('Referrer-Policy', 'no-referrer');
       res.setHeader('X-Frame-Options', 'DENY');
       if (!['GET', 'HEAD'].includes(req.method) && !validOrigin(req)) return fail(res, 403, 'Origen no autorizado.');
       if (req.method === 'GET' && route === '/api/health') return json(res, 200, { ok: true });
       if (req.method === 'GET' && route === '/api/status') {
         const groq = currentGroqConfig();
-        return json(res, 200, { setupRequired: store.userCount() === 0, groqConfigured: Boolean(groq.groqApiKey), groqModel: groq.groqModel, ...store.indexStats(), ingestion: ingestionStatus });
+        const voice = currentVoiceConfig();
+        return json(res, 200, { setupRequired: store.userCount() === 0, groqConfigured: Boolean(groq.groqApiKey), groqModel: groq.groqModel, voice: { transcriptionConfigured: Boolean(voice.fishApiKey), configured: Boolean(voice.fishApiKey && voice.fishVoiceId), model: voice.fishModel }, ...store.indexStats(), ingestion: ingestionStatus });
       }
       if (req.method === 'POST' && route === '/api/auth/register') {
         if (store.userCount() > 0) return fail(res, 403, 'La cuenta inicial ya fue creada.');
@@ -101,6 +108,38 @@ export function createServer(overrides = {}) {
       if (req.method === 'GET' && route === '/api/auth/me') return json(res, 200, { user });
       if (req.method === 'POST' && route === '/api/auth/logout') { store.revokeSession(token); res.setHeader('Set-Cookie', clearCookie(req)); return json(res, 200, { ok: true }); }
       if (route.startsWith('/api/') && !user) return fail(res, 401, 'Inicia sesión para continuar.');
+      if (req.method === 'POST' && ['/api/voice/transcribe', '/api/voice/speech'].includes(route)) {
+        if (req.headers['x-voice-consent'] !== 'true') return fail(res, 400, 'Autoriza el procesamiento de voz antes de continuar.');
+        if (activeVoice.has(user.id)) return fail(res, 429, 'Ya hay una solicitud de voz en curso.');
+        activeVoice.add(user.id);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 90_000);
+        const cancel = () => { if (!res.writableFinished) controller.abort(); };
+        res.on('close', cancel); req.on('aborted', cancel);
+        try {
+          if (route.endsWith('/transcribe')) {
+            audioFormat(req.headers['content-type']);
+            let size = 0; const chunks = [];
+            for await (const chunk of req) { size += chunk.length; if (size > AUDIO_LIMIT) throw Object.assign(new Error('El audio supera 5 MB.'), { status: 413 }); chunks.push(chunk); }
+            const result = await transcribeAudio(Buffer.concat(chunks), req.headers['content-type'], currentVoiceConfig(), controller.signal, overrides.voiceFetch || fetch);
+            if (!res.destroyed) return json(res, 200, result);
+            return;
+          }
+          const body = await bodyJson(req);
+          const conversation = store.getConversation(user.id, String(body.conversationId || ''));
+          const turn = conversation?.turns.find(item => item.id === body.turnId);
+          if (!turn?.answer) return fail(res, 404, 'Respuesta no encontrada en tu conversación.');
+          const audio = await synthesizeAnswer(turn.answer, currentVoiceConfig(), controller.signal, overrides.voiceFetch || fetch);
+          if (!audio.body) throw Object.assign(new Error('Fish Audio no devolvió audio.'), { status: 502 });
+          res.writeHead(200, { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+          await pipeline(Readable.fromWeb(audio.body), res, { signal: controller.signal });
+          return;
+        } catch (error) {
+          if (res.destroyed) return;
+          if (res.headersSent) { res.destroy(); return; }
+          return fail(res, error.status || 502, error.status ? error.message : 'No se pudo completar la solicitud de voz.');
+        } finally { clearTimeout(timer); activeVoice.delete(user.id); res.off('close', cancel); req.off('aborted', cancel); }
+      }
       if (route === '/api/conversations' && req.method === 'GET') {
         ensureConversations(store, user.id);
         return json(res, 200, { conversations: store.listConversations(user.id) });

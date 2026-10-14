@@ -11,6 +11,8 @@ Necesitas:
 3. Una [clave de API de Groq](https://console.groq.com/keys) para la consulta libre y las sugerencias de IA. El resto del MVP puede funcionar sin esa clave.
 4. Conexión a Internet para instalar dependencias y, al usar la IA, comunicarse con Groq. **No** necesitas instalar PostgreSQL, SQLite ni un servidor web adicional.
 
+Para la voz, necesitas además una clave de [Fish Audio](https://fish.audio/) y el ID de tu voz. Configura `FISH_AUDIO_API_KEY`, `FISH_AUDIO_VOICE_ID` y, opcionalmente, `FISH_AUDIO_MODEL` en `mvp/.env`. El botón **Voz** conversa en el mismo chat y el botón de micrófono dicta texto para revisar antes de enviarlo. En un celular, el micrófono requiere HTTPS. Consulta las instrucciones y límites de voz en [mvp/README.md](mvp/README.md#voz-y-dictado).
+
 Clona e instala desde una terminal:
 
 ```bash

@@ -1,10 +1,12 @@
 import { api, download } from './js/api.js';
 import { esc, appendMessage } from './js/chat-render.js';
 import { resizeComposer } from './mobile.js';
+import { attachVoice } from './js/voice.js';
 
 const $ = selector => document.querySelector(selector);
 let current = null, conversations = [], busy = false, setupRequired = false, formats = [], deleteId = null, toastTimer;
 const caseRoute = tail => `/api/cases/${current.case.id}/${tail}`;
+const voice = attachVoice({ send, getConversation: () => current, getConsent: () => $('#ai-consent').checked, onDictation(text) { $('#answer').value = ($('#answer').value.trim() + ' ' + text).trim().slice(0, 4000); resizeComposer(); $('#answer').focus(); toast('Dictado listo. Revisa el texto y pulsa Enviar.'); } });
 function showError(error) {
   $('#chat-error').textContent = error.message || String(error);
   if (error.status === 401) { $('#workspace').hidden = true; $('#auth-screen').hidden = false; }
@@ -72,11 +74,13 @@ function renderFormat() {
 }
 async function openConversation(id) {
   if (busy) return;
+  voice.stop();
   current = await api(`/api/conversations/${id}`);
   localStorage.setItem('abogadoia-conversation', id); closePanels(); render(); await refreshFormats();
 }
 async function createConversation() {
   if (busy) return;
+  voice.stop();
   current = await api('/api/conversations', { method: 'POST', data: {} });
   localStorage.setItem('abogadoia-conversation', current.id); closePanels(); await refreshList(); render();
 }
@@ -84,6 +88,7 @@ function setBusy(value) {
   busy = value; $('#send').disabled = value; $('#answer').disabled = value; $('#new-conversation').disabled = value;
   $('#sending-status').textContent = value ? 'Preparando respuesta…' : '';
   $('#attach-button').disabled = value; $('#upload-document').disabled = value;
+  $('#voice-button').disabled = value; $('#dictate-button').disabled = value;
   $('#messages').setAttribute('aria-busy', String(value));
   document.querySelectorAll('#messages .turn-actions button').forEach(button => { if (value) button.disabled = true; });
 }
@@ -98,6 +103,7 @@ async function send(message = '', action = '', extra = {}) {
     current = await api(`/api/conversations/${current.id}/messages`, { method: 'POST', data: { message, action, consent: $('#ai-consent').checked, ...extra } });
     $('#answer').value = ''; $('#answer').rows = 1; resizeComposer();
     await refreshList(); await refreshFormats();
+    return current;
   } catch (error) {
     showError(error); $('#answer').value = savedInput;
     current = await api(`/api/conversations/${current.id}`).catch(() => current);
@@ -163,7 +169,7 @@ $('#confirm-delete').addEventListener('click', async () => {
   try { await api(`/api/conversations/${deleteId}`, { method: 'DELETE' }); $('#delete-dialog').close(); const wasCurrent = deleteId === current.id; await refreshList(); if (wasCurrent) await openConversation(conversations[0].id); toast('Conversación eliminada.'); }
   catch (error) { showError(error); $('#delete-dialog').close(); }
 });
-$('#logout').addEventListener('click', async () => { if (busy) return; await api('/api/auth/logout', { method: 'POST' }); sessionStorage.removeItem('abogadoia-ai-consent'); $('#ai-consent').checked = false; closePanels(); $('#workspace').hidden = true; $('#auth-screen').hidden = false; await updateStatus(); });
+$('#logout').addEventListener('click', async () => { if (busy) return; voice.stop(); await api('/api/auth/logout', { method: 'POST' }); sessionStorage.removeItem('abogadoia-ai-consent'); $('#ai-consent').checked = false; closePanels(); $('#workspace').hidden = true; $('#auth-screen').hidden = false; await updateStatus(); });
 $('#menu-button').addEventListener('click', () => { $('#document-panel').hidden = true; $('#sidebar').classList.toggle('open'); $('#menu-button').setAttribute('aria-expanded', String($('#sidebar').classList.contains('open'))); syncBackdrop(); });
 $('#close-sidebar').addEventListener('click', closePanels); $('#panel-backdrop').addEventListener('click', closePanels);
 $('#document-button').addEventListener('click', () => $('#document-panel').hidden ? openDocument() : closePanels());

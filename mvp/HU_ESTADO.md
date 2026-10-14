@@ -2,6 +2,8 @@
 
 Fecha de revisión: 2026-10-14. Este registro distingue la función observable de los criterios de aceptación completos. **Parcial** significa que falta al menos una condición del documento. La ejecución actual es un laboratorio local con datos ficticios; ninguna historia implica aprobación jurídica o habilitación para presentar demandas reales.
 
+Función adicional: voz por turnos y dictado en el mismo chat, con Fish Audio, animación, apagado del micrófono, interrupción de respuesta y cierre. Requiere credenciales de Fish, permisos del navegador y HTTPS en celulares remotos. No habilita otros procedimientos ni elimina las confirmaciones del documento. La validación con una cuenta real de Fish y un micrófono físico debe distinguirse de las pruebas con respuestas simuladas.
+
 | HU | Estado | Evidencia o pendiente principal |
 |---|---|---|
 | 01 Alcance y límites | Parcial | Aviso visible y confirmación de datos ficticios; falta consentimiento informado y política aprobada. |

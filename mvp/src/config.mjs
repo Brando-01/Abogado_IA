@@ -39,3 +39,13 @@ export function getConfig() {
     dbPath: path.join(PRIVATE_DIR, 'abogadoia.sqlite')
   };
 }
+
+export function getVoiceConfig(envFile = path.join(PROJECT_ROOT, '.env'), runtimeEnv = process.env) {
+  const local = fs.existsSync(envFile) ? parseEnv(fs.readFileSync(envFile, 'utf8')) : {};
+  const value = (...names) => names.map(name => runtimeEnv[name] || local[name]).find(Boolean) || '';
+  return {
+    fishApiKey: value('FISH_AUDIO_API_KEY', 'FISH_API_KEY'),
+    fishVoiceId: value('FISH_AUDIO_VOICE_ID', 'FISH_VOICE_ID', 'FISH_AUDIO_REFERENCE_ID', 'FISH_REFERENCE_ID'),
+    fishModel: value('FISH_AUDIO_MODEL', 'FISH_MODEL') || 's2.1-pro-free'
+  };
+}
