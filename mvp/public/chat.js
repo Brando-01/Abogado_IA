@@ -1,5 +1,6 @@
 import { api, download } from './js/api.js';
 import { esc, appendMessage } from './js/chat-render.js';
+import { resizeComposer } from './mobile.js';
 
 const $ = selector => document.querySelector(selector);
 let current = null, conversations = [], busy = false, setupRequired = false, formats = [], deleteId = null, toastTimer;
@@ -95,7 +96,7 @@ async function send(message = '', action = '', extra = {}) {
   const thinking = appendMessage($('#messages'), 'assistant', 'Un momento…', { engine: 'Asistente' }); thinking.classList.add('thinking'); scrollEnd();
   try {
     current = await api(`/api/conversations/${current.id}/messages`, { method: 'POST', data: { message, action, consent: $('#ai-consent').checked, ...extra } });
-    $('#answer').value = ''; $('#answer').rows = 1;
+    $('#answer').value = ''; $('#answer').rows = 1; resizeComposer();
     await refreshList(); await refreshFormats();
   } catch (error) {
     showError(error); $('#answer').value = savedInput;
@@ -148,7 +149,7 @@ $('#auth-form').addEventListener('submit', async event => {
 });
 $('#composer').addEventListener('submit', event => { event.preventDefault(); const value = $('#answer').value.trim(); if (value) send(value); });
 $('#answer').addEventListener('input', () => { $('#answer').rows = Math.min(5, Math.max(1, $('#answer').value.split('\n').length)); });
-$('#answer').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !matchMedia('(max-width:760px)').matches) { event.preventDefault(); $('#composer').requestSubmit(); } });
+$('#answer').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !matchMedia('(max-width:760px)').matches && !matchMedia('(pointer:coarse)').matches) { event.preventDefault(); $('#composer').requestSubmit(); } });
 $('#ai-consent').addEventListener('change', () => sessionStorage.setItem('abogadoia-ai-consent', String($('#ai-consent').checked)));
 $('#new-conversation').addEventListener('click', () => createConversation().catch(showError));
 $('#conversation-list').addEventListener('click', event => {

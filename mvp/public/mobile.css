@@ -1,0 +1,16 @@
+/* Controles táctiles y altura visible cuando se abre el teclado del celular. */
+@media(max-width:760px){
+  .workspace{height:var(--chat-viewport-height,100dvh)}
+  .sidebar,.document-panel{height:var(--chat-viewport-height,100dvh);bottom:auto}
+  .thread,.panel-content{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  .icon-button,.send-button{min-width:44px;min-height:44px}
+  .send-button{width:44px;height:44px}
+  .ai-consent{min-height:32px}
+  .composer textarea{font-size:16px;max-height:144px}
+  dialog{max-height:calc(var(--chat-viewport-height,100dvh) - 28px)}
+}
+@media(pointer:coarse){
+  .conversation-delete{opacity:1}
+  .summary-row button,.doc-row button{min-height:44px;min-width:44px}
+}
+@media print{.workspace,.sidebar,.document-panel{height:auto}}
