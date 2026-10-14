@@ -7,7 +7,9 @@ import { Store } from './src/storage.mjs';
 import { normalizeCase, evaluateCase, createDraft } from './src/procedure.mjs';
 import { getLegalCatalog } from './src/legal-catalog.mjs';
 import { startIngestion, ingestionStatus } from './src/ingest.mjs';
-import { suggestWithGroq, answerQuestionWithGroq } from './src/groq.mjs';
+import { suggestWithGroq } from './src/groq.mjs';
+import { askLibrary } from './src/services/rag.mjs';
+import { ensureConversations, conversationView, handleConversationMessage, welcome } from './src/chat/conversation.mjs';
 import { makeDraftPdf, makeOfficialFormPreview } from './src/pdf.mjs';
 import { listFormats, getFormat, assessFormat } from './src/formats.mjs';
 
@@ -55,6 +57,7 @@ function relevantSources(store, data) {
 export function createServer(overrides = {}) {
   const config = { ...getConfig(), ...overrides };
   const store = new Store(config);
+  const activeMessages = new Set();
   const currentGroqConfig = () => ({
     ...getGroqConfig(),
     ...(Object.hasOwn(overrides, 'groqApiKey') ? { groqApiKey: overrides.groqApiKey } : {}),
@@ -98,6 +101,31 @@ export function createServer(overrides = {}) {
       if (req.method === 'GET' && route === '/api/auth/me') return json(res, 200, { user });
       if (req.method === 'POST' && route === '/api/auth/logout') { store.revokeSession(token); res.setHeader('Set-Cookie', clearCookie(req)); return json(res, 200, { ok: true }); }
       if (route.startsWith('/api/') && !user) return fail(res, 401, 'Inicia sesión para continuar.');
+      if (route === '/api/conversations' && req.method === 'GET') {
+        ensureConversations(store, user.id);
+        return json(res, 200, { conversations: store.listConversations(user.id) });
+      }
+      if (route === '/api/conversations' && req.method === 'POST') {
+        const conversation = store.createConversation(user.id);
+        store.addConversationTurn(user.id, conversation.id, welcome);
+        return json(res, 201, conversationView(store, user.id, conversation.id));
+      }
+      const conversationMatch = route.match(/^\/api\/conversations\/([a-f0-9-]{36})(?:\/(messages))?$/);
+      if (conversationMatch) {
+        const conversationId = conversationMatch[1];
+        if (!store.getConversation(user.id, conversationId)) return fail(res, 404, 'Conversación no encontrada.');
+        if (!conversationMatch[2] && req.method === 'GET') return json(res, 200, conversationView(store, user.id, conversationId));
+        if (!conversationMatch[2] && req.method === 'DELETE') {
+          if (activeMessages.has(conversationId)) return fail(res, 409, 'Espera a que termine la respuesta antes de eliminar la conversación.');
+          return json(res, 200, { deleted: store.deleteConversation(user.id, conversationId) });
+        }
+        if (conversationMatch[2] && req.method === 'POST') {
+          if (activeMessages.has(conversationId)) return fail(res, 409, 'Ya hay una respuesta en curso en esta conversación.');
+          activeMessages.add(conversationId);
+          try { return json(res, 200, await handleConversationMessage(store, user.id, conversationId, await bodyJson(req), currentGroqConfig(), overrides.groqFetch || globalThis.fetch)); }
+          finally { activeMessages.delete(conversationId); }
+        }
+      }
       if (route === '/api/qa' && req.method === 'GET') return json(res, 200, { turns: store.qaTurns(user.id) });
       if (route === '/api/qa' && req.method === 'DELETE') return json(res, 200, { deleted: store.clearQaTurns(user.id) });
       if (route === '/api/qa' && req.method === 'POST') {
@@ -107,13 +135,20 @@ export function createServer(overrides = {}) {
         if (!question || question.length > 1200) return fail(res, 400, 'Escribe una pregunta de hasta 1200 caracteres.');
         if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(question) || /\b\d{8,9}\b/.test(question)) return fail(res, 400, 'Quita correos, DNI y teléfonos de la pregunta antes de enviarla.');
         const history = store.qaTurns(user.id, 4);
-        const query = question.length < 45 && history.length ? `${history.at(-1).question} ${question}` : question;
-        const sources = store.search(query, 8);
-        const response = await answerQuestionWithGroq(question, sources, history, currentGroqConfig(), overrides.groqFetch || globalThis.fetch);
+        const response = await askLibrary(store, question, history, currentGroqConfig(), overrides.groqFetch || globalThis.fetch);
         const turn = store.addQaTurn(user.id, { question, ...response });
         return json(res, 200, { turn });
       }
       if (req.method === 'GET' && route === '/api/sources') return json(res, 200, { sources: getLegalCatalog(), indexed: store.sources() });
+      const sourcePdfMatch = route.match(/^\/api\/sources\/([a-f0-9-]{36})\/pdf$/);
+      if (sourcePdfMatch && req.method === 'GET') {
+        const source = store.sourceById(sourcePdfMatch[1]);
+        if (!source) return fail(res, 404, 'Fuente no encontrada.');
+        const file = path.resolve(config.dataDir, source.file_name);
+        if (path.dirname(file) !== path.resolve(config.dataDir) || !fs.existsSync(file)) return fail(res, 404, 'PDF no disponible.');
+        res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Length': fs.statSync(file).size, 'Content-Disposition': 'inline', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+        return fs.createReadStream(file).pipe(res);
+      }
       if (req.method === 'GET' && route === '/api/formats') return json(res, 200, { formats: listFormats() });
       if (req.method === 'POST' && route === '/api/reindex') {
         startIngestion(store, config.dataDir).catch(error => { ingestionStatus.errors.push({ file: '', message: error.message }); ingestionStatus.running = false; });
@@ -162,12 +197,20 @@ export function createServer(overrides = {}) {
         }
         if (tail === 'formats' && req.method === 'GET') return json(res, 200, { formats: listFormats().map(format => ({ ...format, assessment: assessFormat(stored.data, getFormat(format.code)) })) });
         if (tail === 'documents' && req.method === 'GET') return json(res, 200, { documents: stored.documents });
-        if (tail === 'documents' && req.method === 'POST') return json(res, 201, { document: store.addDocument(user.id, caseId, checkedFile(await bodyJson(req, 7_500_000))) });
+        if (tail === 'documents' && req.method === 'POST') {
+          const document = store.addDocument(user.id, caseId, checkedFile(await bodyJson(req, 7_500_000)));
+          store.updateCase(user.id, caseId, normalizeCase({ ...stored.data, reviewConfirmed: false, chatCompleted: stored.data.chatCompleted?.filter(id => id !== 'review') }));
+          return json(res, 201, { document });
+        }
         const documentMatch = tail.match(/^documents\/([a-f0-9-]{36})$/);
         if (documentMatch) {
           const doc = store.document(user.id, caseId, documentMatch[1]);
           if (!doc) return fail(res, 404, 'Documento no encontrado.');
-          if (req.method === 'DELETE') return json(res, 200, { deleted: store.deleteDocument(user.id, caseId, doc.id) });
+          if (req.method === 'DELETE') {
+            const deleted = store.deleteDocument(user.id, caseId, doc.id);
+            store.updateCase(user.id, caseId, normalizeCase({ ...stored.data, reviewConfirmed: false, chatCompleted: stored.data.chatCompleted?.filter(id => id !== 'review') }));
+            return json(res, 200, { deleted });
+          }
           if (req.method === 'GET') {
             const bytes = store.documentBytes(doc);
             res.writeHead(200, { 'Content-Type': doc.mime, 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(doc.original_name)}`, 'Content-Length': bytes.length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });

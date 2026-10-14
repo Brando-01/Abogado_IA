@@ -24,6 +24,9 @@ export class Store {
       CREATE TABLE IF NOT EXISTS legal_chunks(rowid INTEGER PRIMARY KEY,source_id TEXT NOT NULL,page INTEGER NOT NULL,content TEXT NOT NULL,FOREIGN KEY(source_id) REFERENCES legal_sources(id) ON DELETE CASCADE);
       CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(content,tokenize='unicode61 remove_diacritics 2');
       CREATE TABLE IF NOT EXISTS qa_turns(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,encrypted_json TEXT NOT NULL,created_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);
+      CREATE TABLE IF NOT EXISTS conversations(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,encrypted_json TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);
+      CREATE TABLE IF NOT EXISTS conversation_turns(id TEXT PRIMARY KEY,conversation_id TEXT NOT NULL,encrypted_json TEXT NOT NULL,created_at TEXT NOT NULL,FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE);
+      CREATE TABLE IF NOT EXISTS chat_migrations(user_id TEXT PRIMARY KEY,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE);
     `);
   }
 
@@ -66,6 +69,37 @@ export class Store {
       .all(userId, Math.min(Math.max(Number(limit) || 30, 1), 100)).reverse().map(row => this.decrypt(row.encrypted_json));
   }
   clearQaTurns(userId) { return this.db.prepare('DELETE FROM qa_turns WHERE user_id=?').run(userId).changes; }
+
+  createConversation(userId, state = {}) {
+    const conversationId = id(), timestamp = now();
+    this.db.prepare('INSERT INTO conversations VALUES(?,?,?,?,?)').run(conversationId, userId, this.encrypt({ title: 'Nueva conversación', caseId: null, paused: false, pending: null, editing: null, ...state }), timestamp, timestamp);
+    return this.getConversation(userId, conversationId);
+  }
+  getConversation(userId, conversationId) {
+    const row = this.db.prepare('SELECT * FROM conversations WHERE id=? AND user_id=?').get(conversationId, userId);
+    return row ? { id: row.id, state: this.decrypt(row.encrypted_json), createdAt: row.created_at, updatedAt: row.updated_at,
+      turns: this.db.prepare('SELECT encrypted_json FROM conversation_turns WHERE conversation_id=? ORDER BY rowid').all(conversationId).map(turn => this.decrypt(turn.encrypted_json)) } : null;
+  }
+  listConversations(userId) {
+    return this.db.prepare('SELECT id,encrypted_json,updated_at FROM conversations WHERE user_id=? ORDER BY updated_at DESC').all(userId)
+      .map(row => ({ id: row.id, title: this.decrypt(row.encrypted_json).title, caseId: this.decrypt(row.encrypted_json).caseId, updatedAt: row.updated_at }));
+  }
+  updateConversation(userId, conversationId, state) {
+    this.db.prepare('UPDATE conversations SET encrypted_json=?,updated_at=? WHERE id=? AND user_id=?').run(this.encrypt(state), now(), conversationId, userId);
+  }
+  addConversationTurn(userId, conversationId, turn) {
+    if (!this.getConversation(userId, conversationId)) return null;
+    const entry = { id: id(), createdAt: now(), ...turn };
+    this.db.prepare('INSERT INTO conversation_turns VALUES(?,?,?,?)').run(entry.id, conversationId, this.encrypt(entry), entry.createdAt);
+    return entry;
+  }
+  deleteConversation(userId, conversationId) {
+    const conversation = this.getConversation(userId, conversationId);
+    if (!conversation) return false;
+    this.db.prepare('DELETE FROM conversations WHERE id=? AND user_id=?').run(conversationId, userId);
+    if (conversation.state.caseId) this.deleteCase(userId, conversation.state.caseId);
+    return true;
+  }
 
   encrypt(value) {
     const iv = crypto.randomBytes(12);

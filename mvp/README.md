@@ -1,72 +1,79 @@
-# AbogadoIA MVP local
+# AbogadoIA · Chat y documentos
 
-Aplicación local con **consulta libre a Groq sobre la biblioteca PDF** y entrevista guiada para preparar borradores de simulación de demandas iniciales de alimentos para niñas, niños y adolescentes en Perú. Incluye cuenta local, casos cifrados, hasta cinco menores, anexos privados, búsqueda por página en los PDF de `Data de Leyes`, sugerencias opcionales de Groq y descarga de un PDF A4.
+Un solo chat para conversar de cualquier tema, consultar la biblioteca PDF y preparar una simulación de demanda inicial de alimentos para menores en Perú. La demanda se vincula a la conversación: puedes hacer una pregunta durante la preparación, retomar el documento, corregir datos y descargar el PDF sin cambiar de chat.
 
-## Inicio rápido
+## Inicio
 
-Requiere Node.js 24 o superior. Desde `mvp`:
+Requiere Node.js 24 o superior. La [guía de clonación](../README.md) explica la instalación en otra computadora.
 
 ```powershell
+cd mvp
 npm ci
-npm start
+Copy-Item .env.example .env
 ```
 
-Abre `http://127.0.0.1:4173` y crea la primera cuenta. La aplicación leerá automáticamente los PDF de `../Data de Leyes`; el avance aparece en la pantalla. La primera lectura puede tardar unos minutos, según el equipo. Los cambios posteriores pueden actualizarse con **Actualizar biblioteca**.
+Edita `.env`, coloca `GROQ_API_KEY=tu_clave` y ejecuta `npm start`. Abre `http://127.0.0.1:4173/`. Si ya estás en la carpeta `mvp`, omite `cd mvp`. En Linux/macOS usa `cp .env.example .env`. No abras `public/` con Live Server: la aplicación necesita su API Node.
 
-Abre siempre esa dirección para usar la aplicación. Una vista previa estática como Live Server (`127.0.0.1:5500/public/`) no ejecuta la API; ahora redirige al servidor local si está encendido y, si no, muestra cómo iniciarlo.
+La clave se lee solo en el servidor, se actualiza al editar `.env` y está excluida de Git. El selector `GROQ_MODEL` tiene por defecto `openai/gpt-oss-120b`. Los modelos GPT OSS compatibles utilizan salida JSON con esquema estricto; otros modelos usan modo JSON con validación local. Si Groq rechaza la clave, supera su límite o falla la conexión, el chat muestra la causa sin exponer la clave.
 
-La pantalla principal abre en **Consulta libre**: puedes preguntar con tus palabras. La aplicación busca fragmentos pertinentes en SQLite, envía a Groq la pregunta y hasta seis extractos, y muestra archivo y página de las referencias que el modelo seleccione. El historial se cifra en SQLite y puede borrarse desde la interfaz. Marca la casilla de envío a Groq; no incluyas datos personales. **Preparar demanda de prueba** abre el flujo guiado. Cada respuesta se guarda en el caso y la conversación se reconstruye al volver a abrirlo. El panel derecho muestra el avance, permite corregir respuestas, adjuntar archivos y revisar el resumen antes del borrador. El [formulario avanzado](public/formulario.html) queda como editor alternativo del mismo caso.
+## Cómo usar el chat
 
-Para instalar en otra computadora, consulta la [guía de clonación](../README.md).
+- Crea la cuenta inicial o inicia sesión. Las conversaciones anteriores y los casos se importan a la nueva estructura al primer acceso.
+- Activa **Permitir que Groq procese mis mensajes de prueba** para conversar con la IA. La respuesta muestra si proviene de Groq o de un control local.
+- Escribe una pregunta general o jurídica. En respuestas jurídicas, abre **Ver respaldo** para leer las citas literales y abrir el PDF original en su página.
+- Pulsa **Preparar una demanda** o escribe que quieres preparar una demanda de alimentos. La preparación empieza en ese mismo hilo y requiere datos ficticios.
+- Puedes declarar varios datos en un mensaje. Groq propone los campos y el servidor comprueba que cada valor proceda literalmente del mensaje; los incorpora solo después de que confirmes la propuesta. Las opciones de sí/no, los montos y fechas simples se validan localmente.
+- Sin clave de Groq, el documento puede completarse paso a paso con respuestas literales confirmadas localmente. La interpretación de varios datos y la conversación libre requieren la IA.
+- Puedes preguntar cualquier cosa durante el proceso. **Pausar** y **Retomar** controlan la entrevista; los datos permanecen guardados. **Mi documento** muestra el resumen y permite corregirlo desde el chat.
+- Completa el caso y confirma el resumen antes del PDF. Cambiar un dato o los anexos invalida esa confirmación. Los formatos del Poder Judicial se seleccionan en el mismo panel; sus datos adicionales se piden en el chat.
 
-## Clave de Groq
+El diseño usa una conversación central, un menú de historial y un panel de documento que se abre cuando lo necesitas. En celular, el menú y el documento se presentan como paneles sobre el chat; el cuadro de mensaje permanece al pie. Los diálogos y los controles admiten teclado.
 
-Copia [`.env.example`](.env.example) a `.env` y pega tu clave después del signo igual:
+## Cómo funciona el RAG
+
+1. El servidor lee los PDF de `../Data de Leyes`, extrae texto por página y lo divide en fragmentos con un pequeño solapamiento.
+2. SQLite FTS5 indexa ese texto. La recuperación es **léxica**, no utiliza embeddings ni un servicio de vectores externo. Conserva el tema de preguntas cortas de seguimiento y limita repeticiones de páginas y fuentes.
+3. Groq recibe la pregunta, un historial limitado y hasta seis fragmentos. No recibe todos los PDF completos. Las instrucciones le exigen tratar los documentos como datos, usar solo esos extractos para afirmaciones jurídicas y reconocer información insuficiente.
+4. La respuesta jurídica incluye afirmaciones, identificadores de fuente y citas literales. El servidor comprueba que las referencias existan y que las citas estén dentro del texto enviado; si esa comprobación falla, muestra una respuesta de información insuficiente.
+5. La interfaz permite revisar archivo, página y cita en el PDF original. Las consultas generales pueden responderse sin referencias jurídicas.
+
+**No existe una garantía de cero alucinaciones.** El esquema estricto controla la estructura de la respuesta, no su verdad. Comprobar una cita literal acredita su presencia en el extracto; no prueba que el modelo la haya interpretado correctamente. La recuperación puede omitir una norma relevante y la biblioteca no tiene todavía un catálogo de vigencia aprobado. La interpretación, vigencia y suficiencia jurídica requieren revisión profesional.
+
+La carpeta contiene 23 PDF; 20 tenían texto buscable en la comprobación local. Los tres sin texto requieren OCR. No necesitas transformarlos manualmente a Word. Puedes añadir PDF con texto a `Data de Leyes/` y pulsar **Actualizar biblioteca**, o ejecutar `npm run ingest`. Los anexos de casos son archivos privados para el borrador; no se incorporan automáticamente al índice jurídico ni se envían como PDF a Groq.
+
+## Estructura del código
 
 ```text
-GROQ_API_KEY=tu_clave_aqui
+server.mjs                  HTTP, autenticación y rutas
+src/chat/conversation.mjs   Conversación, acciones y confirmación de datos
+src/chat/workflow.mjs       Preguntas y validación del formulario
+src/services/rag.mjs        Recuperación de contexto desde FTS5
+src/services/groq-chat.mjs  Prompts, esquema JSON y comprobación de respaldo
+src/storage.mjs             SQLite, cifrado y aislamiento por usuario
+src/ingest.mjs              Extracción e indexación de los PDF
+src/procedure.mjs           Evaluación del caso y borrador determinista
+src/pdf.mjs                 PDF de simulación y vista sobre formato oficial
+public/chat.js              Coordinación de la interfaz unificada
+public/js/                  Cliente HTTP y presentación de mensajes
+tests/                      Pruebas del recorrido y de los controles
 ```
 
-La clave se actualiza desde `.env` al consultar Groq, sin reiniciar el servidor. Se lee solo en el servidor y **no se envía al navegador**. El botón **Pedir sugerencia a Groq** envía el relato y los fragmentos recuperados con sustitución de nombres, domicilios y documento conocidos por seudónimos. La redacción recibida se muestra para revisión; solo entra en el caso cuando pulsas **Aplicar y revisar**. Después debes volver a confirmar el resumen. No pegues datos reales en el relato: la seudonimización automática no puede detectar todos los identificadores.
+El editor `public/formulario.html` y las rutas antiguas se conservan por compatibilidad; el recorrido principal es el chat unificado.
 
-Si la clave está vacía, la consulta libre y la sugerencia dejan un error claro; entrevista, casos, búsqueda local, anexos y PDF siguen funcionando.
+## Datos y alcance
 
-## SQLite y los PDF
+SQLite ya está incluido a través de Node (`node:sqlite`). La aplicación crea `private/abogadoia.sqlite` y `private/server.key`; no necesita PostgreSQL. Usuarios, sesiones y fuentes se guardan en SQLite; casos, conversaciones, mensajes y anexos se cifran con AES-256-GCM. Las contraseñas se derivan con `scrypt`. `.env`, `private/`, dependencias y archivos generados están excluidos de Git.
 
-SQLite **ya es la base de datos** de este MVP (`mvp/private/abogadoia.sqlite`). Guarda usuarios, sesiones, casos cifrados, historial cifrado de consultas y un índice FTS5 de los PDF. No necesitas instalar PostgreSQL para ejecutar esta versión local. Para una copia sencilla, detén el servidor antes de copiar `mvp/private/`; con el servidor activo usa una copia de seguridad de SQLite en vez de copiar solo el archivo `.sqlite`.
+Para trasladar los datos, detén el servidor y copia `private/` completo de forma privada, incluido `server.key`. Con el servidor activo usa una copia de seguridad consistente de SQLite. Eliminar una conversación elimina sus mensajes, caso vinculado y anexos; no hay recuperación desde la interfaz.
 
-Los PDF no se envían completos a Groq ni se convierten manualmente a Word. El servidor extrae texto por página, lo divide en fragmentos y los indexa; cada pregunta recupera solo los más relevantes. Actualmente hay 23 PDF registrados, 20 con texto buscable. Los tres restantes no tienen texto extraíble y requieren OCR para entrar en las respuestas. El índice no garantiza vigencia jurídica ni convierte los fragmentos en citas aprobadas.
+Los anexos admiten PDF, PNG y JPEG de hasta 5 MB, con comprobación básica de firma; falta antivirus. El piloto admite hasta cinco menores, exige confirmación del resumen y bloquea supuestos fuera del alcance, pretensiones acumuladas, urgencia y personas adultas. El PDF usa únicamente datos declarados y lleva **SIMULACIÓN - NO PRESENTAR**. Los formatos disponibles corresponden a dos versiones del Poder Judicial para alimentos de menores; su canal, competencia y adaptación requieren revisión. No hay presentación automática.
 
-## Funciones incluidas
+El estado de las 40 historias y los pendientes está en [HU_ESTADO.md](HU_ESTADO.md). La aplicación no está habilitada para expedientes reales ni exposición pública: siguen pendientes aprobación jurídica de normas y plantillas, protección de datos, retención, antivirus, auditoría por documento, seguridad y HTTPS.
 
-- La primera cuenta se crea desde la web; después se inicia sesión con correo y contraseña. Las contraseñas se derivan con `scrypt` y los casos/anexos se cifran con AES-256-GCM en `mvp/private/`.
-- Las reglas deterministas bloquean procedimientos fuera del piloto, pretensiones acumuladas, situaciones urgentes y personas adultas. Permiten marcar el domicilio de la persona demandada como desconocido con advertencia.
-- Los casos y anexos se guardan localmente. Cada anexo admite PDF, PNG o JPEG de hasta 5 MB. Los archivos se descargan desde el caso correspondiente.
-- Se indexan todos los PDF de `Data de Leyes` con SQLite FTS5. Cada resultado muestra archivo y página. Los PDF sin capa de texto figuran con una advertencia de OCR.
-- El borrador y el PDF incluyen solo hechos y montos declarados. La lista de anexos del PDF incluye únicamente archivos cargados. Los fragmentos recuperados aparecen **sin aprobación jurídica**.
-- El PDF lleva la marca **SIMULACIÓN - NO PRESENTAR**. No se firma ni se envía a ningún portal judicial.
-- **Formatos por entidad** identifica dos versiones del Poder Judicial para la demanda inicial de alimentos de menores: la incorporada en la R. A. 000111-2024-CE-PJ, con datos ficticios superpuestos y hoja de continuación, y el ejemplar del portal de formatos, como referencia sin completar. Ambos incluyen enlace a su fuente y la indicación del destino y canal por verificar. Otros procedimientos de la carpeta no se ofrecen como formatos equivalentes.
-- El panel **Continuar el trámite** enlaza al catálogo y a los tutoriales oficiales del Poder Judicial. No presenta un escrito ni verifica la aceptación de la Mesa de Partes.
-- El PDF requiere confirmación explícita del resumen. El chat detiene la entrevista si el caso está fuera del alcance o indica riesgo urgente.
-
-## Pruebas
+## Verificación
 
 ```powershell
 npm test
 ```
 
-Para rehacer el índice por línea de comandos:
-
-```powershell
-npm run ingest
-```
-
-## Límites antes de casos reales
-
-Esta versión está configurada para **datos ficticios**. No prueba que un nombre ingresado sea ficticio. No se ha aprobado la vigencia artículo por artículo, la competencia, los requisitos del canal de presentación ni la adaptación completa del formulario de 2024. La sugerencia de Groq no se usa como autoridad jurídica. Tres PDF de la carpeta carecen de texto extraíble y necesitan OCR si se quieren buscar.
-
-El chat implementa el recorrido conversacional del piloto, pero no cubre todavía las 40 historias de usuario del plan. Por ejemplo, faltan administración/versionado jurídico de fuentes, citas con artículos y URL aprobados, validación de malware, política de conservación y revisión profesional. La consulta libre usa Groq con fragmentos recuperados de la biblioteca; la entrevista para la demanda sigue reglas controladas y Groq también puede sugerir redacción. La superposición de datos sobre la R. A. conserva texto preimpreso, casillas y espacios que aún requieren revisión humana; la hoja adicional conserva el relato completo.
-
-El estado verificable de cada historia está en [HU_ESTADO.md](HU_ESTADO.md).
-
-La base es SQLite local para que el piloto funcione sin credenciales externas; el plan de producción propone PostgreSQL. Antes de abrir el servicio al público faltan revisión jurídica profesional, revisión de protección de datos de menores y proveedores, análisis de transferencia internacional, antivirus para archivos, política de retención y borrado, copias de seguridad, pruebas de seguridad y despliegue con HTTPS. No expongas este servidor local a Internet ni lo uses con expedientes reales.
+Las pruebas cubren el hilo unificado (consulta → demanda → confirmación → PDF → corrección), aislamiento y cifrado, respaldo ausente o inventado, extracción de datos no declarados, reanudación, anexos y formatos.

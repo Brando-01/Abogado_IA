@@ -1,6 +1,6 @@
 # AbogadoIA
 
-MVP local de asistente legal para Perú. Permite consultar en lenguaje natural la biblioteca de PDF con Groq, preparar un caso ficticio de alimentos para niñas, niños y adolescentes y descargar un PDF de **simulación**. El estado de las historias de usuario y los límites del piloto están en [mvp/HU_ESTADO.md](mvp/HU_ESTADO.md).
+MVP local de asistente legal para Perú. En **una misma conversación** puedes hablar de cualquier tema, consultar tus PDF con Groq, preparar una demanda ficticia de alimentos para menores, revisar sus datos y descargar un PDF de **simulación**. Interfaz adaptable a computadora y celular. El estado de las historias de usuario y los límites del piloto están en [mvp/HU_ESTADO.md](mvp/HU_ESTADO.md).
 
 ## Instalar en otra computadora
 

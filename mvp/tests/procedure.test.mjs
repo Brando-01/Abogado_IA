@@ -117,7 +117,7 @@ test('consulta libre usa extractos recuperados y valida las referencias de Groq'
   let request;
   const fakeFetch = async (_url, options) => {
     request = JSON.parse(options.body);
-    return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ answer: 'El extracto menciona alimentos.', references: ['F1', 'F99'] }) } }] }) };
+    return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ domain: 'legal', sufficient: true, answer: '', claims: [{ text: 'El extracto menciona alimentos.', ref: 'F1', quote: 'El artículo trata de alimentos.' }] }) } }] }) };
   };
   const response = await answerQuestionWithGroq('¿Qué dice la ley sobre alimentos?', [
     { title: 'Ley de prueba', file_name: 'ley.pdf', page: 3, content: 'El artículo trata de alimentos.' }
@@ -172,7 +172,7 @@ test('almacenamiento cifra casos y aísla usuarios', () => {
 
 test('API completa: cuenta, caso, anexo privado y PDF', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'abogadoia-api-'));
-  const server = createServer({ dbPath: path.join(dir, 'test.sqlite'), privateDir: dir, secret: crypto.randomBytes(32), groqApiKey: 'clave-ficticia', dataDir: path.resolve('../Data de Leyes'), groqFetch: async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ answer: 'Respuesta con fuente de prueba.', references: ['F1'] }) } }] }) }) });
+  const server = createServer({ dbPath: path.join(dir, 'test.sqlite'), privateDir: dir, secret: crypto.randomBytes(32), groqApiKey: 'clave-ficticia', dataDir: path.resolve('../Data de Leyes'), groqFetch: async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ domain: 'legal', sufficient: true, answer: '', claims: [{ text: 'El extracto trata de alimentos para menores.', ref: 'F1', quote: 'La prueba contiene información sobre alimentos para menores.' }] }) } }] }) }) });
   server.appStore.replaceSource({ fileName: 'prueba.pdf', sha256: 'a'.repeat(64), title: 'Ley de prueba', category: 'core', pages: 1, chunks: [{ page: 1, content: 'La prueba contiene información sobre alimentos para menores.' }], warning: null });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
