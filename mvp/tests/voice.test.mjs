@@ -5,20 +5,40 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { getVoiceConfig } from '../src/config.mjs';
-import { transcribeAudio, synthesizeAnswer, audioFormat, spokenText } from '../src/services/voice.mjs';
+import { transcribeAudio, synthesizeAnswer, audioFormat, spokenText, voiceStatus } from '../src/services/voice.mjs';
 import { createServer } from '../server.mjs';
 import { VoiceSession } from '../public/js/voice.js';
 
-const config = { fishApiKey: 'secret-test-only', fishVoiceId: 'voice-test-only', fishModel: 's2.1-pro-free' };
+const config = { fishApiKey: 'secret-test-only', fishVoiceId: 'voice-test-only', fishModel: 's2.1-pro-free', sttProvider: 'fish' };
 test('la configuración de voz admite aliases, recarga .env y respeta variables del proceso', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'voice-config-')), file = path.join(dir, '.env');
   try {
     fs.writeFileSync(file, 'FISH_API_KEY=primera\nFISH_REFERENCE_ID="voz-prueba"');
     assert.equal(getVoiceConfig(file, {}).fishVoiceId, 'voz-prueba');
+    assert.equal(getVoiceConfig(file, {}).sttProvider, 'groq');
     fs.writeFileSync(file, 'FISH_AUDIO_API_KEY=segunda\nFISH_AUDIO_MODEL=s2.1-pro');
     assert.equal(getVoiceConfig(file, {}).fishApiKey, 'segunda');
     assert.equal(getVoiceConfig(file, { FISH_AUDIO_API_KEY: 'proceso' }).fishApiKey, 'proceso');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Groq transcribe por defecto sin usar ni necesitar crédito ASR de Fish', async () => {
+  const groqConfig = { groqApiKey: 'test-groq-key', sttModel: 'whisper-large-v3-turbo' };
+  const result = await transcribeAudio(Buffer.from('audio fake'), 'audio/webm;codecs=opus', groqConfig, undefined, async (url, options) => {
+    assert.equal(url, 'https://api.groq.com/openai/v1/audio/transcriptions');
+    assert.equal(options.headers.Authorization, 'Bearer test-groq-key');
+    assert.equal(options.body.get('file').name, 'mensaje.webm'); assert.equal(options.body.get('audio'), null);
+    assert.equal(options.body.get('model'), 'whisper-large-v3-turbo');
+    assert.equal(options.body.get('language'), 'es'); assert.equal(options.body.get('temperature'), '0');
+    assert.equal(options.body.get('response_format'), 'json'); return Response.json({ text: 'Hola de prueba.' });
+  });
+  assert.equal(result.text, 'Hola de prueba.');
+  assert.equal(voiceStatus(groqConfig).transcriptionConfigured, true);
+  assert.equal(voiceStatus(groqConfig).configured, false);
+  assert.equal(voiceStatus({ ...config, ...groqConfig, sttProvider: 'groq' }).configured, true);
+  await assert.rejects(transcribeAudio(Buffer.from('audio'), 'audio/webm', {}, undefined, () => assert.fail('No debe llamar sin clave')), /GROQ_API_KEY/);
+  await assert.rejects(transcribeAudio(Buffer.from('audio'), 'audio/webm', { ...groqConfig, sttProvider: 'invalid' }, undefined, () => assert.fail('No debe cambiar de proveedor')), /VOICE_STT_PROVIDER/);
+  await assert.rejects(transcribeAudio(Buffer.from('audio'), 'audio/webm', groqConfig, undefined, async () => new Response(groqConfig.groqApiKey, { status: 429 })), error => error.status === 429 && !error.message.includes(groqConfig.groqApiKey));
 });
 test('ASR envía WebM como multipart al modelo compatible y quita marcadores de hablante', async () => {
   const result = await transcribeAudio(Buffer.from('fake audio'), 'audio/webm;codecs=opus', config, undefined, async (url, options) => {
@@ -65,6 +85,8 @@ test('voz requiere sesión, consentimiento y propiedad del turno; no guarda arch
     assert.equal((await call('/api/voice/speech', JSON.stringify({ conversationId: otherConversation.id, turnId: otherTurn.id }))).status, 404);
     assert.equal((await call('/api/voice/speech', JSON.stringify({ text: 'Arbitrary text' }))).status, 404);
     assert.equal((await call('/api/voice/transcribe', 'audio', true, true, 'text/html')).status, 415);
+    const changedProvider = await fetch(base + '/api/voice/transcribe', { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'audio/webm', 'X-Voice-Consent': 'true', 'X-Voice-STT-Provider': 'groq' }, body: 'audio' });
+    assert.equal(changedProvider.status, 409);
     assert.equal(calls, 0);
     const asr = await call('/api/voice/transcribe', Buffer.from('webm fake'), true, true, 'audio/webm');
     assert.deepEqual(await asr.json(), { text: 'Hola' });
@@ -77,10 +99,10 @@ test('voz requiere sesión, consentimiento y propiedad del turno; no guarda arch
   } finally { await new Promise(resolve => server.close(resolve)); server.appStore.close(); fs.rmSync(dir, { recursive: true, force: true }); }
 });
 test('terminar voz libera dispositivos, aborta solicitudes y descarta un permiso tardío', async () => {
-  let resolvePermission, stopped = 0, lastState;
+  let resolvePermission, stopped = 0, lastState, disclosedProvider;
   const stream = { getTracks: () => [{ stop() { stopped++; } }] };
-  const voice = new VoiceSession({ onState: state => { lastState = state; }, onTranscript() { assert.fail('No debe transcribir'); }, send() { assert.fail('No debe enviar'); }, getConversation: () => null, getConsent: () => true,
-    mediaDevices: { getUserMedia: () => new Promise(resolve => { resolvePermission = resolve; }) }, Recorder: class {}, Context: class {}, AudioPlayer: class {}, fetchImpl: async () => Response.json({ voice: { configured: true, transcriptionConfigured: true } }) });
+  const voice = new VoiceSession({ onState: state => { lastState = state; }, onProvider: provider => { disclosedProvider = provider; }, onTranscript() { assert.fail('No debe transcribir'); }, send() { assert.fail('No debe enviar'); }, getConversation: () => null, getConsent: () => true,
+    mediaDevices: { getUserMedia: () => new Promise(resolve => { assert.equal(disclosedProvider, 'groq'); resolvePermission = resolve; }) }, Recorder: class {}, Context: class {}, AudioPlayer: class {}, fetchImpl: async () => Response.json({ voice: { configured: true, transcriptionConfigured: true, transcriptionProvider: 'groq' } }) });
   const pending = voice.start('conversation');
   while (!resolvePermission) await new Promise(resolve => setImmediate(resolve));
   voice.stop(); resolvePermission(stream); await pending;

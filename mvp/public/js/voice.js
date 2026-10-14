@@ -1,7 +1,7 @@
 // Audio is kept in memory. A session number invalidates late network/device results.
 export class VoiceSession {
-  constructor({ onState, onTranscript, send, getConversation, getConsent, fetchImpl = (...args) => globalThis.fetch(...args), mediaDevices = navigator.mediaDevices, Recorder = globalThis.MediaRecorder, Context = globalThis.AudioContext || globalThis.webkitAudioContext, AudioPlayer = globalThis.Audio }) {
-    Object.assign(this, { onState, onTranscript, send, getConversation, getConsent, fetchImpl, mediaDevices, Recorder, Context, AudioPlayer });
+  constructor({ onState, onTranscript, onProvider = () => {}, send, getConversation, getConsent, fetchImpl = (...args) => globalThis.fetch(...args), mediaDevices = navigator.mediaDevices, Recorder = globalThis.MediaRecorder, Context = globalThis.AudioContext || globalThis.webkitAudioContext, AudioPlayer = globalThis.Audio }) {
+    Object.assign(this, { onState, onTranscript, onProvider, send, getConversation, getConsent, fetchImpl, mediaDevices, Recorder, Context, AudioPlayer });
     this.generation = 0; this.captureEpoch = 0; this.active = false; this.muted = false; this.phase = 'idle';
   }
   state(phase, detail = '') { this.phase = phase; this.detail = detail; this.onState({ phase, detail, active: this.active, muted: this.muted, mode: this.mode }); }
@@ -16,8 +16,11 @@ export class VoiceSession {
       const response = await this.fetchImpl('/api/status', { signal: this.request.signal });
       if (!response.ok) throw new Error('No se pudo comprobar la configuración de voz.');
       const status = await response.json();
-      if (!status.voice?.transcriptionConfigured || mode === 'conversation' && !status.voice?.configured) throw new Error('Falta configurar Fish Audio en mvp/.env: FISH_AUDIO_API_KEY y FISH_AUDIO_VOICE_ID.');
+      if (!status.voice?.transcriptionConfigured) throw new Error(status.voice?.transcriptionProvider === 'fish' ? 'Configura FISH_AUDIO_API_KEY para transcribir con Fish Audio.' : 'Configura GROQ_API_KEY para transcribir el micrófono con Groq.');
+      if (mode === 'conversation' && !status.voice?.configured) throw new Error('Configura FISH_AUDIO_API_KEY y FISH_AUDIO_VOICE_ID para escuchar respuestas.');
       if (!this.alive(generation)) return;
+      this.sttProvider = status.voice.transcriptionProvider || 'groq';
+      this.onProvider(this.sttProvider, mode);
       await this.listen(generation);
     } catch (error) { this.failure(error, generation); }
   }
@@ -87,7 +90,7 @@ export class VoiceSession {
   }
   async process(blob, generation) {
     this.state('transcribing', 'Convirtiendo tu voz en texto…');
-    const response = await this.call('/api/voice/transcribe', { method: 'POST', body: blob, headers: { 'Content-Type': blob.type } }, generation);
+    const response = await this.call('/api/voice/transcribe', { method: 'POST', body: blob, headers: { 'Content-Type': blob.type, 'X-Voice-STT-Provider': this.sttProvider || 'groq' } }, generation);
     const { text } = await response.json();
     if (!this.alive(generation)) return;
     if (!text?.trim()) { this.state('listening', 'No reconocí palabras. Inténtalo de nuevo.'); if (!this.muted) await this.listen(generation); return; }
@@ -146,6 +149,7 @@ export function attachVoice({ send, getConversation, getConsent, onDictation }) 
   const $ = id => document.getElementById(id), dialog = $('voice-dialog');
   let mode = 'conversation';
   const session = new VoiceSession({ send, getConversation, getConsent,
+    onProvider(provider, type) { const name = provider === 'fish' ? 'Fish Audio' : 'Groq'; $('voice-description').textContent = type === 'dictate' ? `Tu audio se envía a ${name} para transcribirlo. Revisa el texto en el chat antes de enviarlo.` : `Tu audio se transcribe con ${name}; Groq responde en este mismo chat y Fish Audio pone la voz. Haz una pausa para enviar cada mensaje.`; },
     onTranscript(text, type) { $('voice-transcript').textContent = text; if (type === 'dictate') { onDictation(text); dialog.close(); } },
     onState({ phase, detail, active, muted, mode: currentMode }) {
       dialog.dataset.phase = phase;
@@ -161,7 +165,7 @@ export function attachVoice({ send, getConversation, getConsent, onDictation }) 
     if (!getConversation()) return;
     session.stop(); mode = type; $('voice-transcript').textContent = '';
     $('voice-title').textContent = type === 'dictate' ? 'Dicta tu mensaje' : 'Conversemos por voz';
-    $('voice-description').textContent = type === 'dictate' ? 'Tu audio se envía a Fish Audio para transcribirlo. Revisa el texto en el chat antes de enviarlo.' : 'Tu audio se transcribe con Fish Audio; Groq responde en este mismo chat y Fish Audio pone la voz. Haz una pausa para enviar cada mensaje.';
+    $('voice-description').textContent = type === 'dictate' ? 'Dicta y revisa el texto antes de enviarlo. Al iniciar se indicará si tu audio se transcribe con Groq o Fish Audio.' : 'Conversa en este mismo chat. Groq responde y Fish Audio pone la voz. Al iniciar se indicará si tu audio se transcribe con Groq o Fish Audio.';
     $('voice-start').textContent = type === 'dictate' ? 'Iniciar dictado' : 'Iniciar conversación';
     dialog.showModal();
   }

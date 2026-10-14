@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { getConfig, getGroqConfig, getVoiceConfig, PROJECT_ROOT } from './src/config.mjs';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { AUDIO_LIMIT, audioFormat, transcribeAudio, synthesizeAnswer } from './src/services/voice.mjs';
+import { AUDIO_LIMIT, audioFormat, transcribeAudio, synthesizeAnswer, voiceStatus } from './src/services/voice.mjs';
 import { Store } from './src/storage.mjs';
 import { normalizeCase, evaluateCase, createDraft } from './src/procedure.mjs';
 import { getLegalCatalog } from './src/legal-catalog.mjs';
@@ -62,7 +62,7 @@ export function createServer(overrides = {}) {
   const store = new Store(config);
   const activeMessages = new Set();
   const activeVoice = new Set();
-  const currentVoiceConfig = () => ({ ...getVoiceConfig(), ...Object.fromEntries(['fishApiKey', 'fishVoiceId', 'fishModel'].filter(key => Object.hasOwn(overrides, key)).map(key => [key, overrides[key]])) });
+  const currentVoiceConfig = () => ({ ...getVoiceConfig(), ...Object.fromEntries(['fishApiKey', 'fishVoiceId', 'fishModel', 'groqApiKey', 'sttProvider', 'sttModel'].filter(key => Object.hasOwn(overrides, key)).map(key => [key, overrides[key]])) });
   const currentGroqConfig = () => ({
     ...getGroqConfig(),
     ...(Object.hasOwn(overrides, 'groqApiKey') ? { groqApiKey: overrides.groqApiKey } : {}),
@@ -80,7 +80,7 @@ export function createServer(overrides = {}) {
       if (req.method === 'GET' && route === '/api/status') {
         const groq = currentGroqConfig();
         const voice = currentVoiceConfig();
-        return json(res, 200, { setupRequired: store.userCount() === 0, groqConfigured: Boolean(groq.groqApiKey), groqModel: groq.groqModel, voice: { transcriptionConfigured: Boolean(voice.fishApiKey), configured: Boolean(voice.fishApiKey && voice.fishVoiceId), model: voice.fishModel }, ...store.indexStats(), ingestion: ingestionStatus });
+        return json(res, 200, { setupRequired: store.userCount() === 0, groqConfigured: Boolean(groq.groqApiKey), groqModel: groq.groqModel, voice: voiceStatus(voice), ...store.indexStats(), ingestion: ingestionStatus });
       }
       if (req.method === 'POST' && route === '/api/auth/register') {
         if (store.userCount() > 0) return fail(res, 403, 'La cuenta inicial ya fue creada.');
@@ -118,10 +118,12 @@ export function createServer(overrides = {}) {
         res.on('close', cancel); req.on('aborted', cancel);
         try {
           if (route.endsWith('/transcribe')) {
+            const voice = currentVoiceConfig();
+            if (req.headers['x-voice-stt-provider'] && req.headers['x-voice-stt-provider'] !== voiceStatus(voice).transcriptionProvider) return fail(res, 409, 'Cambió el proveedor de transcripción. Cierra e inicia de nuevo la voz para revisar el destino del audio.');
             audioFormat(req.headers['content-type']);
             let size = 0; const chunks = [];
             for await (const chunk of req) { size += chunk.length; if (size > AUDIO_LIMIT) throw Object.assign(new Error('El audio supera 5 MB.'), { status: 413 }); chunks.push(chunk); }
-            const result = await transcribeAudio(Buffer.concat(chunks), req.headers['content-type'], currentVoiceConfig(), controller.signal, overrides.voiceFetch || fetch);
+            const result = await transcribeAudio(Buffer.concat(chunks), req.headers['content-type'], voice, controller.signal, overrides.voiceFetch || fetch);
             if (!res.destroyed) return json(res, 200, result);
             return;
           }

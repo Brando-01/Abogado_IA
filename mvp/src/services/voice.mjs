@@ -7,6 +7,11 @@ export function audioFormat(contentType = '') {
   if (!formats.has(mime)) throw error('Formato de audio no admitido. Usa WebM, MP4, Ogg, WAV o MP3.', 415);
   return { mime, extension: formats.get(mime) };
 }
+export function voiceStatus(config) {
+  const transcriptionProvider = config.sttProvider || 'groq';
+  const transcriptionConfigured = transcriptionProvider === 'groq' ? Boolean(config.groqApiKey) : transcriptionProvider === 'fish' && Boolean(config.fishApiKey);
+  return { transcriptionProvider, transcriptionModel: transcriptionProvider === 'groq' ? config.sttModel || 'whisper-large-v3-turbo' : 'transcribe-1-pro', transcriptionConfigured, configured: Boolean(transcriptionConfigured && config.fishApiKey && config.fishVoiceId), model: config.fishModel };
+}
 function requireConfig(config, speech = false) {
   if (!config.fishApiKey) throw error('Configura FISH_AUDIO_API_KEY en mvp/.env para activar la voz.', 503);
   if (speech && !config.fishVoiceId) throw error('Configura FISH_AUDIO_VOICE_ID en mvp/.env para escuchar respuestas.', 503);
@@ -28,15 +33,35 @@ async function fishRequest(endpoint, options, fetchImpl) {
   }
 }
 export async function transcribeAudio(bytes, contentType, config, signal, fetchImpl = fetch) {
-  requireConfig(config);
   const { mime, extension } = audioFormat(contentType);
   if (!bytes.length || bytes.length > AUDIO_LIMIT) throw error('El audio debe ocupar entre 1 byte y 5 MB.', 413);
+  const provider = config.sttProvider || 'groq';
+  if (!['groq', 'fish'].includes(provider)) throw error('VOICE_STT_PROVIDER debe ser groq o fish en mvp/.env.', 503);
+  if (provider === 'fish') requireConfig(config);
+  else if (!config.groqApiKey) throw error('Configura GROQ_API_KEY para transcribir el micrófono con Groq.', 503);
   const form = new FormData();
-  form.append('audio', new Blob([bytes], { type: mime }), `mensaje.${extension}`);
-  form.append('language', 'es'); form.append('ignore_timestamps', 'true'); form.append('tag_audio_events', 'false'); form.append('diarize', 'false');
-  const response = await fishRequest('asr', { method: 'POST', headers: { Authorization: `Bearer ${config.fishApiKey}`, model: 'transcribe-1-pro' }, body: form, signal }, fetchImpl);
+  form.append(provider === 'groq' ? 'file' : 'audio', new Blob([bytes], { type: mime }), `mensaje.${extension}`);
+  form.append('language', 'es');
+  let response;
+  if (provider === 'fish') {
+    form.append('ignore_timestamps', 'true'); form.append('tag_audio_events', 'false'); form.append('diarize', 'false');
+    response = await fishRequest('asr', { method: 'POST', headers: { Authorization: `Bearer ${config.fishApiKey}`, model: 'transcribe-1-pro' }, body: form, signal }, fetchImpl);
+  } else {
+    form.append('model', config.sttModel || 'whisper-large-v3-turbo'); form.append('temperature', '0'); form.append('response_format', 'json');
+    try {
+      response = await fetchImpl('https://api.groq.com/openai/v1/audio/transcriptions', { method: 'POST', headers: { Authorization: `Bearer ${config.groqApiKey}` }, body: form, signal });
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => {});
+        const messages = { 401: 'Groq rechazó la clave de transcripción.', 403: 'Groq no permite usar el modelo de transcripción.', 402: 'Groq no tiene crédito disponible para transcribir.', 429: 'Groq alcanzó su límite de transcripción. Intenta nuevamente en un momento.', 400: 'Groq rechazó el audio o GROQ_STT_MODEL. Revisa la grabación y el modelo.' };
+        throw error(messages[response.status] || 'Groq no pudo transcribir el audio.', [402, 429].includes(response.status) ? response.status : 502);
+      }
+    } catch (cause) {
+      if (cause.status) throw cause;
+      throw error(signal?.aborted ? 'La transcripción terminó o superó el tiempo de espera.' : 'No se pudo conectar con Groq para transcribir.', signal?.aborted ? 408 : 502);
+    }
+  }
   let result;
-  try { result = await response.json(); } catch { throw error('Fish Audio devolvió una transcripción inválida.'); }
+  try { result = await response.json(); } catch { throw error('El proveedor devolvió una transcripción inválida.'); }
   const text = typeof result.text === 'string' ? result.text.replace(/<\|[^>]*\|>/g, '').trim() : '';
   if (text.length > 4000) throw error('El mensaje es demasiado largo. Graba una frase más corta.', 400);
   return { text };

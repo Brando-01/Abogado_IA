@@ -44,6 +44,9 @@ export function getVoiceConfig(envFile = path.join(PROJECT_ROOT, '.env'), runtim
   const local = fs.existsSync(envFile) ? parseEnv(fs.readFileSync(envFile, 'utf8')) : {};
   const value = (...names) => names.map(name => runtimeEnv[name] || local[name]).find(Boolean) || '';
   return {
+    ...getGroqConfig(envFile, runtimeEnv),
+    sttProvider: value('VOICE_STT_PROVIDER').toLowerCase() || 'groq',
+    sttModel: value('GROQ_STT_MODEL') || 'whisper-large-v3-turbo',
     fishApiKey: value('FISH_AUDIO_API_KEY', 'FISH_API_KEY'),
     fishVoiceId: value('FISH_AUDIO_VOICE_ID', 'FISH_VOICE_ID', 'FISH_AUDIO_REFERENCE_ID', 'FISH_REFERENCE_ID'),
     fishModel: value('FISH_AUDIO_MODEL', 'FISH_MODEL') || 's2.1-pro-free'

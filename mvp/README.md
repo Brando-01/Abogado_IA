@@ -37,24 +37,26 @@ En `mvp/.env`, añade tu configuración privada:
 FISH_AUDIO_API_KEY=tu_clave
 FISH_AUDIO_VOICE_ID=id_de_tu_voz
 FISH_AUDIO_MODEL=s2.1-pro-free
+VOICE_STT_PROVIDER=groq
+GROQ_STT_MODEL=whisper-large-v3-turbo
 ```
 
-Se admiten también `FISH_API_KEY`, `FISH_VOICE_ID` y `FISH_REFERENCE_ID`. La configuración se vuelve a leer al usar la voz. El modelo se puede cambiar a otro que admita tu cuenta y tu voz. La API de transcripción utiliza `transcribe-1-pro`, compatible con los formatos de grabación del navegador. Las llamadas pueden consumir saldo o límites de Fish Audio; que TTS tenga un modelo gratuito no implica que ASR sea gratuito.
+Se admiten también `FISH_API_KEY`, `FISH_VOICE_ID` y `FISH_REFERENCE_ID`. La configuración se vuelve a leer al usar la voz. Por defecto, **Groq transcribe el micrófono** con tu `GROQ_API_KEY` y el modelo `whisper-large-v3-turbo`; **Fish Audio genera la voz** con `s2.1-pro-free` y tu ID. No se usa el servicio ASR de Fish en esta configuración. Los límites o costos de Groq y Fish dependen de sus cuentas y modelos; el modelo Free de Fish para generar voz no convierte su servicio de transcripción en gratuito. Puedes elegir explícitamente `VOICE_STT_PROVIDER=fish` para transcribir con `transcribe-1-pro` si tu cuenta de Fish dispone de crédito de API. No se cambia de proveedor automáticamente ante un error.
 
 - **Voz** abre la animación. Pulsa **Iniciar conversación**, autoriza el micrófono y habla. Después de una pausa de aproximadamente 1,3 segundos se transcribe tu mensaje, se envía al mismo chat y se reproduce la respuesta con tu voz configurada. La animación muestra escucha, procesamiento y respuesta.
 - **Apagar micrófono** libera la captura; **Activar micrófono** la retoma. **Interrumpir respuesta** detiene la reproducción. **Terminar**, cerrar el diálogo, cambiar de conversación o pasar la aplicación a segundo plano detiene la interacción y libera el micrófono. Una respuesta del chat ya solicitada puede terminar y quedar guardada aunque hayas terminado la voz.
 - El botón de **micrófono** junto a **Voz** permite dictar y pulsar **Usar dictado**. El texto queda en el cuadro de mensaje para revisarlo y enviarlo con el botón habitual.
 - Si el navegador bloquea la reproducción automática, pulsa **Escuchar respuesta**. Si deniega el micrófono, habilítalo en sus permisos.
 
-La interacción es continua **por turnos**, con latencia de transcripción, Groq y síntesis; no es audio bidireccional simultáneo. La captura se pausa mientras se procesa o reproduce una respuesta. Cada grabación dura hasta 45 segundos y tiene un límite de 5 MB. El audio se procesa en memoria, sin guardarlo en SQLite ni en archivos. Fish Audio recibe el audio y el texto de las respuestas; Groq recibe el texto mediante el flujo habitual del chat. El manejo de datos de esos proveedores depende de sus políticas. Las transcripciones pueden equivocarse: revisa los datos del documento antes de confirmarlos.
+La interacción es continua **por turnos**, con latencia de transcripción, Groq y síntesis; no es audio bidireccional simultáneo. La captura se pausa mientras se procesa o reproduce una respuesta. Cada grabación dura hasta 45 segundos y tiene un límite de 5 MB. El audio se procesa en memoria, sin guardarlo en SQLite ni en archivos. **Con la configuración por defecto, Groq recibe el audio del micrófono y el texto del chat; Fish Audio recibe el texto de las respuestas para ponerles voz.** Si eliges `VOICE_STT_PROVIDER=fish`, Fish recibe también el audio. El diálogo indica el proveedor al iniciar. Si cambia mientras grabas, se rechaza el envío hasta que reinicies la interacción. El manejo de datos de esos proveedores depende de sus políticas. Las transcripciones pueden equivocarse: revisa los datos del documento antes de confirmarlos.
 
 Usa un navegador actualizado con micrófono (Chrome, Edge o Safari). En esta computadora funciona con `localhost` o `127.0.0.1`. **En un celular conectado por una dirección IP local necesitas HTTPS** para que el navegador habilite el micrófono. No basta con abrir una IP por HTTP. No hay que instalar paquetes de audio, PostgreSQL ni convertir las grabaciones manualmente.
 
-Contratos de API: [transcripción de Fish Audio](https://docs.fish.audio/features/speech-to-text) y [síntesis de voz](https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech).
+Contratos de API: [transcripción de Groq](https://console.groq.com/docs/speech-to-text), [transcripción opcional de Fish Audio](https://docs.fish.audio/features/speech-to-text) y [síntesis de voz](https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech).
 
 ### Si la voz falla con 402
 
-Fish Audio administra el crédito de **API** por separado del saldo de su plataforma. Si transcripción o síntesis devuelve 402 por crédito insuficiente, revisa el [panel de desarrolladores y saldo de API](https://fish.audio/app/developers) de la cuenta que emitió tu clave. Cambiar la clave, reinstalar dependencias o cambiar de modelo no acredita saldo. Con saldo disponible, vuelve a iniciar la voz; la aplicación lee la configuración sin reiniciar. Si modificas el código del servidor, sí debes reiniciar `npm start`.
+El modelo `s2.1-pro-free` corresponde a **texto a voz**, no a reconocimiento del micrófono. Si `/api/voice/transcribe` falla con 402 de Fish aunque uses ese modelo Free, configura `VOICE_STT_PROVIDER=groq` para transcribir con tu clave de Groq. Si elegiste ASR de Fish o un modelo de voz que exige crédito, revisa el [panel de desarrolladores y saldo de API](https://fish.audio/app/developers): ese crédito se administra por separado del saldo de la plataforma. La aplicación lee cambios de `.env` al iniciar de nuevo la voz. Si modificas código del servidor, sí debes reiniciar `npm start` y recargar la página.
 
 ## Cómo funciona el RAG
 
