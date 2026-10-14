@@ -2,6 +2,7 @@ import { initialCase, allSteps, steps, currentStep, applyStep, directAnswer, wor
 import { evaluateCase, normalizeCase } from '../procedure.mjs';
 import { interpretMessageWithGroq } from '../services/groq-chat.mjs';
 import { askLibrary } from '../services/rag.mjs';
+import { draftIntent, procedureConfirmation } from './intent.mjs';
 
 const failure = (message, status = 400) => Object.assign(new Error(message), { status });
 const clean = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -14,6 +15,15 @@ export function conversationView(store, userId, conversationId) {
   const item = conversation.state.caseId ? store.getCase(userId, conversation.state.caseId) : null;
   if (item) item.data = normalizeCase(item.data);
   const data = item?.data;
+  const emptyCase = data && !data.chatCompleted.length && !item.documents.length &&
+    ![data.applicantName, data.applicantDocument, data.respondentName, data.factDescription, data.expenseDescription].some(Boolean) &&
+    !data.children.some(child => child.name || child.birthDate) && !(data.requestedAmount > 0);
+  if (emptyCase && !conversation.state.procedureConfirmed && !conversation.state.procedureSelectionRepair) {
+    conversation.state.paused = true; conversation.state.procedureSelectionRepair = true;
+    store.updateConversation(userId, conversationId, conversation.state);
+    conversation.turns.push(store.addConversationTurn(userId, conversationId, { question: '', engine: 'Asistente',
+      answer: 'La preparación del documento quedó pausada: todavía no se confirmó el procedimiento. Podemos seguir consultando sobre tu asunto en este chat. Al elegir un documento, te pediré confirmar su tipo antes de tomar datos.', actions: actions(['start_draft', 'Elegir un documento']) }));
+  }
   return { ...conversation, case: item, evaluation: data ? evaluateCase(data, { hasDocuments: item.documents.length > 0 }) : null,
     fields: data ? allSteps(data).filter(step => step.id !== 'review').map(step => ({ ...step,
       value: !data.chatCompleted.includes(step.id) && ['consent', 'claims', 'risk', 'childrenCount', 'evidence'].includes(step.id) ? '' : stepValue(data, step.id), complete: data.chatCompleted.includes(step.id) })) : [],
@@ -66,34 +76,55 @@ export async function handleConversationMessage(store, userId, conversationId, b
   let data = item ? normalizeCase(item.data) : null, message = String(body.message || '').trim(), action = String(body.action || '');
   if (message.length > 4000) throw failure('Escribe un mensaje de hasta 4000 caracteres.');
   const text = clean(message);
+  const intent = draftIntent(message, state.choosingDocumentType);
   if (!action && /^(ya )?no quiero.*\b(demanda|documento|entrevista)\b/.test(text)) action = 'pause_draft';
   if (!action && state.pending?.length && conversation.turns.at(-1)?.proposals?.length && /^(si|confirmo|si, confirmo)\.?$/.test(text)) action = 'confirm_data';
   if (!action && state.pending?.length && conversation.turns.at(-1)?.proposals?.length && /^(no|descartar)\.?$/.test(text)) action = 'reject_data';
-  if (!action && /\b(quiero|necesito|preparar|hacer|redactar|crear|ayudame|hazme|elabora|genera)\b.*\b(demanda|documento de alimentos)\b/.test(text) && !/^[¿]?(como|cuando|que|puedo)\b/.test(text)) action = 'start_draft';
+  if (!action && ['confirm_alimentos', 'choose_document', 'other_document'].includes(intent)) action = 'select_procedure';
+  if (!action && state.awaitingProcedure === 'ALIMENTOS_NNA' && conversation.turns.at(-1)?.proposedProcedure === 'ALIMENTOS_NNA') {
+    if (/^(si|si, alimentos para menores|confirmo)\.?$/.test(text)) action = 'confirm_procedure';
+    else if (/^(no|no, seguir conversando)\.?$/.test(text)) action = 'cancel_procedure';
+  }
   if (!action && /^(pausa|pausar|deten|dejar).*\b(demanda|documento|entrevista)\b/.test(text)) action = 'pause_draft';
   if (!action && /^(continuar|continua|retomar|sigamos|seguir|reanudar).*\b(demanda|documento|entrevista)\b/.test(text)) action = 'resume_draft';
   if (!action && /^(ver|mostrar|descargar).*(borrador|pdf|resumen|documento)/.test(text)) action = 'show_document';
   if (!message && !action) throw failure('Escribe un mensaje para continuar.');
-  if (!message) message = ({ start_draft: 'Quiero preparar una demanda de prueba.', pause_draft: 'Pausar la preparación del documento.', resume_draft: 'Continuar la preparación del documento.', confirm_data: 'Sí, registrar los datos propuestos.', reject_data: 'No, descartar los datos propuestos.', confirm_review: 'He revisado el resumen y lo confirmo.', format_details: 'Completar datos del formato oficial.', edit: `Corregir ${body.stepId || 'un dato'}.`, show_document: 'Revisar mi documento.' })[action] || 'Continuar';
+  if (!message) message = ({ start_draft: 'Quiero preparar una demanda de prueba.', confirm_procedure: 'Sí, quiero preparar alimentos para menores.', cancel_procedure: 'No, quiero seguir conversando.', pause_draft: 'Pausar la preparación del documento.', resume_draft: 'Continuar la preparación del documento.', confirm_data: 'Sí, registrar los datos propuestos.', reject_data: 'No, descartar los datos propuestos.', confirm_review: 'He revisado el resumen y lo confirmo.', format_details: 'Completar datos del formato oficial.', edit: `Corregir ${body.stepId || 'un dato'}.`, show_document: 'Revisar mi documento.' })[action] || 'Continuar';
   let response;
   const saveData = next => { data = next; item = store.updateCase(userId, state.caseId, data); };
-  if (action === 'start_draft') {
-    if (/\b(divorcio|laboral|desalojo|filiacion|tenencia|adultos?|mayores)\b/.test(text)) {
-      response = { answer: 'La creación de documentos en este piloto solo cubre una demanda inicial de alimentos para menores. El procedimiento que mencionas necesita un flujo distinto; podemos seguir conversando y consultar la biblioteca sobre él.', actions: actions(['library_question', 'Consultar mi biblioteca']) };
+  if (action === 'start_draft' || action === 'select_procedure') {
+    if (action === 'select_procedure' && intent === 'other_document') {
+      state.choosingDocumentType = false; state.awaitingProcedure = null;
+      response = { answer: 'Podemos revisar ese asunto en el chat. El generador de PDF disponible cubre alimentos para menores; el documento que mencionas requiere otro procedimiento. ¿Qué necesitas aclarar sobre ese asunto?', actions: actions(['library_question', 'Consultar mi biblioteca']) };
+    } else if (action === 'select_procedure' && intent === 'choose_document') {
+      state.choosingDocumentType = true; state.awaitingProcedure = null;
+      response = { answer: '¿Sobre qué asunto quieres preparar el documento? Primero aclaremos el procedimiento. El PDF disponible en este piloto es la demanda de alimentos para menores.', actions: actions(['start_draft', 'Elegir alimentos para menores']) };
     } else {
+      state.choosingDocumentType = false; state.awaitingProcedure = 'ALIMENTOS_NNA';
+      response = procedureConfirmation();
+    }
+  } else if (action === 'confirm_procedure') {
+    if (state.awaitingProcedure !== 'ALIMENTOS_NNA' || conversation.turns.at(-1)?.proposedProcedure !== 'ALIMENTOS_NNA') throw failure('Primero selecciona y confirma el procedimiento que quieres preparar.');
+    state.awaitingProcedure = null; state.choosingDocumentType = false; state.procedureConfirmed = true;
       if (!item) { item = store.createCase(userId, initialCase()); state.caseId = item.id; data = item.data; }
       state.paused = false;
       response = { ...nextResponse(data, state), answer: `Podemos preparar una demanda inicial de alimentos para menores, como simulación. Iremos reuniendo los datos en esta misma conversación; puedes preguntar o pausar cuando quieras.\n\n${nextResponse(data, state).answer}` };
-    }
+  } else if (action === 'cancel_procedure') {
+    state.awaitingProcedure = null; state.choosingDocumentType = false;
+    response = { answer: 'Seguimos en el chat. Cuéntame el asunto que quieres consultar.', actions: actions(['library_question', 'Consultar mi biblioteca']) };
   } else if (action === 'pause_draft') {
     state.paused = true; state.editing = null;
     response = { answer: 'La preparación queda pausada y tus datos están guardados. Podemos conversar de cualquier tema. Cuando quieras, retomamos aquí.', actions: item ? actions(['resume_draft', 'Retomar documento']) : [] };
   } else if (action === 'resume_draft' || action === 'format_details') {
     if (!item) throw failure('Primero inicia un documento en esta conversación.');
     if (action === 'format_details' && evaluateCase(data).status !== 'draft_ready') throw failure('Completa primero los datos principales de la demanda.');
-    state.paused = false;
-    if (action === 'format_details') state.formatDetails = true;
-    response = nextResponse(data, state);
+    if (!data.chatCompleted.length && !state.procedureConfirmed) {
+      state.awaitingProcedure = 'ALIMENTOS_NNA'; response = procedureConfirmation();
+    } else {
+      state.paused = false;
+      if (action === 'format_details') state.formatDetails = true;
+      response = nextResponse(data, state);
+    }
   } else if (action === 'edit') {
     if (!item || !allSteps(data).some(step => step.id === body.stepId && step.id !== 'review')) throw failure('No se encontró ese dato.');
     state.pending = null; state.editing = body.stepId; state.paused = false;
@@ -153,12 +184,12 @@ export async function handleConversationMessage(store, userId, conversationId, b
         response = await askLibrary(store, redactKnown(message, data), history, config, fetchImpl);
         if (state.pending?.length) response.actions = actions(['resume_draft', 'Revisar datos pendientes'], ['show_document', 'Mi documento']);
         else if (item) response.actions = actions(['resume_draft', 'Seguir con el documento'], ['show_document', 'Mi documento']);
-        else response.actions = actions(['start_draft', 'Preparar una demanda']);
+        else response.actions = [];
       }
       }
     }
   }
-  if (state.title === 'Nueva conversación') state.title = action === 'start_draft' ? 'Demanda de alimentos' : message.slice(0, 60);
+  if (state.title === 'Nueva conversación') state.title = action === 'confirm_procedure' ? 'Demanda de alimentos' : message.slice(0, 60);
   store.updateConversation(userId, conversationId, state);
   store.addConversationTurn(userId, conversationId, { question: message, engine: 'Asistente', ...response });
   return conversationView(store, userId, conversationId);

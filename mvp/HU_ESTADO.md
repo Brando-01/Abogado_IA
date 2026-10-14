@@ -9,7 +9,7 @@ Fecha de revisión: 2026-10-14. Este registro distingue la función observable d
 | 03 Caso independiente | Parcial | UUID, propietario, fechas y aislamiento por usuario; falta estado explícito versionado. |
 | 04 Procedimiento disponible | Implementada para piloto | Lista blanca de una demanda inicial de alimentos para menores. |
 | 05 Hechos en lenguaje natural | Parcial | Groq extrae varios datos con valor y cita literal del mensaje, sujetos a confirmación; falta un registro jurídico de procedencia completo. |
-| 06 Confirmar clasificación | Pendiente | No hay clasificación asistida con confirmación explícita. |
+| 06 Confirmar clasificación | Parcial | Distingue consulta de petición directa; pregunta el asunto y confirma explícitamente alimentos para menores antes de crear un caso. Falta clasificación jurídica administrable para otros procedimientos. |
 | 07 Caso no soportado | Implementada | Las reglas detienen el flujo y la generación. |
 | 08 Admite autogestión | Pendiente | Falta regla jurídica aprobada con fecha, alcance y fuente. |
 | 09 Preguntas comprensibles | Implementada para piloto | Chat guiado, una pregunta por turno. |

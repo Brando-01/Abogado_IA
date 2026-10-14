@@ -85,7 +85,7 @@ test('sin clave de Groq se pueden confirmar datos literales sin enviarlos a IA',
     const user = store.createUser('offline@example.test', 'contraseña-offline-prueba');
     const conversation = store.createConversation(user.id);
     const send = body => handleConversationMessage(store, user.id, conversation.id, body, { groqApiKey: '' }, () => { throw new Error('No debe haber una llamada externa'); });
-    for (const body of [{ action: 'start_draft' }, { message: 'Sí' }, { message: 'Madre' }, { message: 'No' }, { message: 'No' }]) await send(body);
+    for (const body of [{ action: 'start_draft' }, { action: 'confirm_procedure' }, { message: 'Sí' }, { message: 'Madre' }, { message: 'No' }, { message: 'No' }]) await send(body);
     const proposed = await send({ message: 'Ana Ejemplo' });
     assert.equal(proposed.case.data.applicantName, ''); assert.equal(proposed.turns.at(-1).engine, 'Asistente');
     const confirmed = await send({ action: 'confirm_data' });
@@ -123,6 +123,8 @@ test('un único hilo permite consulta, demanda, confirmación, PDF, corrección 
     await send({ message: 'Quiero preparar una demanda de divorcio', consent: true });
     assert.equal(chat.case, null);
     await send({ action: 'start_draft' });
+    assert.equal(chat.case, null);
+    await send({ action: 'confirm_procedure' });
     const caseId = chat.case.id;
     await send({ message: 'Sí' });
     await send({ message: 'Soy la madre, me llamo Ana Ejemplo', consent: true });

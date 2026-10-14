@@ -21,7 +21,7 @@ La clave se lee solo en el servidor, se actualiza al editar `.env` y está exclu
 - Crea la cuenta inicial o inicia sesión. Las conversaciones anteriores y los casos se importan a la nueva estructura al primer acceso.
 - Activa **Permitir que Groq procese mis mensajes de prueba** para conversar con la IA. La respuesta muestra si proviene de Groq o de un control local.
 - Escribe una pregunta general o jurídica. En respuestas jurídicas, abre **Ver respaldo** para leer las citas literales y abrir el PDF original en su página.
-- Pulsa **Preparar una demanda** o escribe que quieres preparar una demanda de alimentos. La preparación empieza en ese mismo hilo y requiere datos ficticios.
+- Pulsa **Preparar una demanda** o solicita un documento en el chat. Primero se aclara el asunto y se confirma explícitamente **alimentos para menores** antes de crear el caso. Preguntas como «cómo procedo si me robaron el celular» siguen siendo consultas; mencionar «demanda» no activa una entrevista de alimentos. La preparación requiere datos ficticios.
 - Puedes declarar varios datos en un mensaje. Groq propone los campos y el servidor comprueba que cada valor proceda literalmente del mensaje; los incorpora solo después de que confirmes la propuesta. Las opciones de sí/no, los montos y fechas simples se validan localmente.
 - Sin clave de Groq, el documento puede completarse paso a paso con respuestas literales confirmadas localmente. La interpretación de varios datos y la conversación libre requieren la IA.
 - Puedes preguntar cualquier cosa durante el proceso. **Pausar** y **Retomar** controlan la entrevista; los datos permanecen guardados. **Mi documento** muestra el resumen y permite corregirlo desde el chat.
