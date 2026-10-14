@@ -52,6 +52,10 @@ Usa un navegador actualizado con micrófono (Chrome, Edge o Safari). En esta com
 
 Contratos de API: [transcripción de Fish Audio](https://docs.fish.audio/features/speech-to-text) y [síntesis de voz](https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech).
 
+### Si la voz falla con 402
+
+Fish Audio administra el crédito de **API** por separado del saldo de su plataforma. Si transcripción o síntesis devuelve 402 por crédito insuficiente, revisa el [panel de desarrolladores y saldo de API](https://fish.audio/app/developers) de la cuenta que emitió tu clave. Cambiar la clave, reinstalar dependencias o cambiar de modelo no acredita saldo. Con saldo disponible, vuelve a iniciar la voz; la aplicación lee la configuración sin reiniciar. Si modificas el código del servidor, sí debes reiniciar `npm start`.
+
 ## Cómo funciona el RAG
 
 1. El servidor lee los PDF de `../Data de Leyes`, extrae texto por página y lo divide en fragmentos con un pequeño solapamiento.

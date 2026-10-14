@@ -16,8 +16,9 @@ async function fishRequest(endpoint, options, fetchImpl) {
     const response = await fetchImpl(`https://api.fish.audio/v1/${endpoint}`, options);
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});
-      const messages = { 401: 'Fish Audio rechazó la clave API.', 403: 'Fish Audio no permite usar esta voz o modelo.', 402: 'Fish Audio requiere saldo o un plan compatible.', 429: 'Fish Audio alcanzó su límite. Intenta de nuevo en un momento.', 400: 'Fish Audio rechazó el audio o la configuración de voz.', 404: 'Fish Audio no encontró la voz o el modelo configurado.' };
-      throw error(messages[response.status] || 'Fish Audio no pudo procesar la voz. Intenta nuevamente.');
+      const messages = { 401: 'Fish Audio rechazó la clave API.', 403: 'Fish Audio no permite usar esta voz o modelo.', 402: 'Fish Audio no tiene saldo de API disponible (402). El crédito de API es independiente del saldo de la plataforma. Revisa tu saldo en fish.audio/app/developers.', 429: 'Fish Audio alcanzó su límite. Intenta de nuevo en un momento.', 400: 'Fish Audio rechazó el audio o la configuración de voz.', 404: 'Fish Audio no encontró la voz o el modelo configurado.' };
+      // Upstream authentication errors must not look like an expired local session.
+      throw error(messages[response.status] || 'Fish Audio no pudo procesar la voz. Intenta nuevamente.', [402, 429].includes(response.status) ? response.status : 502);
     }
     return response;
   } catch (cause) {

@@ -42,7 +42,7 @@ test('TTS lee la respuesta existente sin inventar texto y los errores no exponen
     assert.equal(body.format, 'mp3'); return new Response('audio');
   });
   assert.equal(spokenText('[Fuente](https://example.test) https://example.test'), 'Fuente');
-  await assert.rejects(synthesizeAnswer('Hola', config, undefined, async () => new Response(config.fishApiKey, { status: 402 })), /saldo/);
+  await assert.rejects(synthesizeAnswer('Hola', config, undefined, async () => new Response(config.fishApiKey, { status: 402 })), error => error.status === 402 && /saldo de API/.test(error.message) && /independiente/.test(error.message) && !error.message.includes(config.fishApiKey));
   await assert.rejects(transcribeAudio(Buffer.from('audio'), 'audio/webm', config, undefined, async () => { throw new Error(config.fishApiKey); }), error => !error.message.includes(config.fishApiKey));
 });
 test('voz requiere sesión, consentimiento y propiedad del turno; no guarda archivos de audio', async () => {
