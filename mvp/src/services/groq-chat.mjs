@@ -1,9 +1,11 @@
 const error = (message, status = 502) => Object.assign(new Error(message), { status });
+import { legalTopic, normalizeQuery } from './legal-query.mjs';
 const normalized = text => String(text || '').replace(/\s+/g, ' ').trim();
 const objectSchema = properties => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
 const string = { type: 'string' };
 export function isLegalQuestion(question, history = []) {
-  const text = question.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/^[¿¡\s]+/, '');
+  if (legalTopic(question)) return true;
+  const text = normalizeQuery(question).replace(/^[¿¡\s]+/, '');
   if (/\b(ley|leyes|legal|juridic\w*|articulo|demanda|juzgado|judicial|pension|alimentos|derecho\w*|norma\w*|sentencia|abogado|filiacion|tenencia|plazo|requisito|constitucion|codigo|denuncia|contrato|divorcio|delito|robo|robaron|robado|robada|hurto|estafa)\b/.test(text)) return true;
   return /^(y |entonces|eso|esa |ese |en ese caso)/.test(text) && history.slice(-2).some(turn => turn.grounding !== 'general' && /ley|demanda|alimentos|pension|articulo/i.test(turn.question || ''));
 }
@@ -35,8 +37,8 @@ export async function completeJson(system, payload, schema, config, fetchImpl = 
   } finally { clearTimeout(timeout); }
 }
 
-const insufficient = (model, reason = 'No encontré respaldo suficiente en los fragmentos recuperados para confirmar eso.') => ({
-  answer: `${reason} Puedes precisar la norma o el tema, buscar en la biblioteca y revisar el PDF original. No puedo confirmar artículos, plazos ni vigencia sin ese respaldo.`,
+const insufficient = (model, question, reason = 'No encontré respaldo suficiente en los fragmentos recuperados para confirmar los pasos jurídicos de tu consulta.') => ({
+  answer: `${legalTopic(question) === 'support' ? 'Entiendo que consultas por una pensión o el aporte para tu hijo/a. ¿Qué edad tiene y ya existe un acuerdo o una resolución sobre la pensión?\n\n' : legalTopic(question) === 'theft' ? 'Para entender lo que ocurrió con tu celular: ¿te lo quitaron con amenazas o violencia, lo tomaron sin que lo notaras o lo perdiste?\n\n' : ''}${reason} Puedes buscar en la biblioteca y revisar el PDF original. No puedo confirmar artículos, plazos ni vigencia sin ese respaldo.`,
   references: [], grounding: 'insufficient', engine: 'Control de respaldo', model,
   notice: 'Información insuficiente. La biblioteca local no acredita la vigencia de una norma.'
 });
@@ -45,7 +47,7 @@ export async function answerQuestionWithGroq(question, sources, history, config,
   const context = sources.slice(0, 6).map((source, index) => ({ ref: `F${index + 1}`, sourceId: source.source_id,
     title: source.title, file: source.file_name, page: source.page, excerpt: String(source.content || '').slice(0, 1400) }));
   const legalExpected = isLegalQuestion(question, history);
-  if (legalExpected && !context.length) return insufficient(config.groqModel);
+  if (legalExpected && !context.length) return insufficient(config.groqModel, question);
   const claimSchema = objectSchema({ text: string, ref: string, quote: string });
   const schema = objectSchema({ domain: { type: 'string', enum: ['general', 'legal'] }, sufficient: { type: 'boolean' },
     answer: string, claims: { type: 'array', items: claimSchema } });
@@ -56,18 +58,20 @@ export async function answerQuestionWithGroq(question, sources, history, config,
   if (!['general', 'legal'].includes(parsed.domain) || typeof parsed.sufficient !== 'boolean' || typeof parsed.answer !== 'string' || !Array.isArray(parsed.claims)) throw error('La IA devolvió una respuesta incompleta. Intenta nuevamente.');
   if (parsed.domain === 'general' && !legalExpected) return { answer: parsed.answer.trim().slice(0, 6000) || '¿Puedes darme más contexto?',
     references: [], grounding: 'general', engine: 'Groq', model: config.groqModel, notice: 'Respuesta general de IA; puede contener errores.' };
-  if (!parsed.sufficient || !parsed.claims.length) return insufficient(config.groqModel);
+  if (!parsed.sufficient || !parsed.claims.length) return insufficient(config.groqModel, question);
   const allowed = new Map(context.map(source => [source.ref, source]));
-  const claims = parsed.claims.slice(0, 8);
-  const valid = claims.every(claim => claim && typeof claim === 'object' && typeof claim.text === 'string' && claim.text.trim() && claim.text.length <= 2000 &&
+  const proposed = parsed.claims.slice(0, 8);
+  const claims = proposed.filter(claim => claim && typeof claim === 'object' && typeof claim.text === 'string' && claim.text.trim() && claim.text.length <= 2000 &&
     typeof claim.quote === 'string' && normalized(claim.quote).length >= 15 && allowed.has(claim.ref) &&
     normalized(allowed.get(claim.ref).excerpt).includes(normalized(claim.quote)) &&
     ![...claim.text.matchAll(/\bF\d+\b/g)].some(match => !allowed.has(match[0])));
-  if (!valid) return insufficient(config.groqModel, 'La respuesta de IA no superó la comprobación de citas; no la presentaré como una conclusión jurídica.');
+  if (!claims.length) return insufficient(config.groqModel, question, 'La respuesta de IA no superó la comprobación de citas; no la presentaré como una conclusión jurídica.');
+  const partial = claims.length < parsed.claims.length;
   const references = [...new Set(claims.map(claim => claim.ref))].map(ref => ({ ...allowed.get(ref), quotes: claims.filter(claim => claim.ref === ref).map(claim => claim.quote) }));
-  return { answer: claims.map(claim => `${claim.text.trim()} [${claim.ref}]`).join('\n\n'), references,
-    grounding: 'evidence_checked', engine: 'Groq', model: config.groqModel,
-    notice: 'Citas literales comprobadas en los extractos. La interpretación y la vigencia requieren revisión jurídica.' };
+  const checkedAnswer = claims.map(claim => `${claim.text.trim()} [${claim.ref}]`).join('\n\n');
+  return { answer: partial ? `Encontré respaldo para estos puntos, pero la información es parcial:\n\n${checkedAnswer}${legalTopic(question) === 'support' ? '\n\nPara ajustar los siguientes pasos: ¿qué edad tiene tu hijo/a y ya existe un acuerdo o una resolución sobre la pensión?' : ''}` : checkedAnswer, references,
+    grounding: partial ? 'evidence_partial' : 'evidence_checked', engine: 'Groq', model: config.groqModel,
+    notice: `${partial ? 'Respaldo parcial: se omitieron afirmaciones cuyas citas no pudieron comprobarse. No es una lista completa de pasos. ' : ''}Citas literales comprobadas en los extractos. La interpretación y la vigencia requieren revisión jurídica.` };
 }
 
 export async function interpretMessageWithGroq(message, availableSteps, pendingStep, config, fetchImpl = globalThis.fetch) {

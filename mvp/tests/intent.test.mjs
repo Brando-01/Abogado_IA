@@ -46,6 +46,29 @@ test('el mensaje exacto de robo va al RAG y no crea un caso de alimentos', async
   assert.ok(!result.turns.at(-1).answer.includes('demanda inicial de alimentos'));
 }));
 
+test('la consulta de pensión con errores recupera alimentos sin activar una demanda ni exigir casilla', async () => withStore(async (store, user) => {
+  const quote = 'Texto ficticio de prueba sobre alimentos y pensión para un menor.';
+  store.replaceSource({ fileName: 'alimentos.pdf', sha256: 'b'.repeat(64), title: 'Fuente de prueba de alimentos', category: 'core', pages: 1, chunks: [{ page: 1, content: quote }] });
+  store.replaceSource({ fileName: 'pareja.pdf', sha256: 'c'.repeat(64), title: 'Texto ajeno al tema', category: 'other', pages: 1, chunks: [{ page: 1, content: 'Una pareja comparte otros problemas y habla del paso a paso.' }] });
+  const conversation = store.createConversation(user.id);
+  const result = await handleConversationMessage(store, user.id, conversation.id, { message: 'dame el paso a paso hacer si tengo problema sobre mi pareja que a abandonado a su hijo y no recibo una pesion' }, { groqApiKey: 'prueba', groqModel: 'modelo-prueba' }, async (_url, options) => {
+    const payload = JSON.parse(JSON.parse(options.body).messages[1].content);
+    assert.equal(payload.legalExpected, true); assert.ok(payload.unverifiedLocalExcerpts.length);
+    assert.ok(payload.unverifiedLocalExcerpts.every(source => source.title === 'Fuente de prueba de alimentos'));
+    return Response.json({ choices: [{ message: { content: JSON.stringify({ domain: 'legal', sufficient: true, answer: '', claims: [{ text: 'La fuente de prueba menciona alimentos.', ref: 'F1', quote }] }) } }] });
+  });
+  assert.equal(result.turns.at(-1).grounding, 'evidence_checked'); assert.equal(result.case, null);
+}));
+
+test('sin respaldo, una consulta de robo pregunta por lo ocurrido sin citar fuentes ajenas', async () => withStore(async (store, user) => {
+  store.replaceSource({ fileName: 'alimentos.pdf', sha256: 'd'.repeat(64), title: 'Alimentos', category: 'core', pages: 1, chunks: [{ page: 1, content: 'Demanda de alimentos para menores: texto ficticio.' }] });
+  const conversation = store.createConversation(user.id);
+  const result = await handleConversationMessage(store, user.id, conversation.id, { message: 'si me roban mi celular como porceod ah acer uan demanda' }, { groqApiKey: 'prueba' }, () => assert.fail('No hay fuente pertinente que enviar al modelo'));
+  const turn = result.turns.at(-1);
+  assert.equal(turn.grounding, 'insufficient'); assert.match(turn.answer, /celular.*amenazas/s);
+  assert.equal(turn.references.length, 0); assert.equal(result.case, null);
+}));
+
 test('una petición genérica pregunta el tipo y exige confirmación antes de crear el caso', async () => withStore(async (store, user) => {
   const conversation = store.createConversation(user.id);
   const send = body => handleConversationMessage(store, user.id, conversation.id, body, { groqApiKey: '' });

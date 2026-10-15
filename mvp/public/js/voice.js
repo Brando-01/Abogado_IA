@@ -1,7 +1,8 @@
 // Audio is kept in memory. A session number invalidates late network/device results.
+import { AudioVisualizer } from './audio-visualizer.js';
 export class VoiceSession {
-  constructor({ onState, onTranscript, onProvider = () => {}, send, getConversation, getConsent, fetchImpl = (...args) => globalThis.fetch(...args), mediaDevices = navigator.mediaDevices, Recorder = globalThis.MediaRecorder, Context = globalThis.AudioContext || globalThis.webkitAudioContext, AudioPlayer = globalThis.Audio }) {
-    Object.assign(this, { onState, onTranscript, onProvider, send, getConversation, getConsent, fetchImpl, mediaDevices, Recorder, Context, AudioPlayer });
+  constructor({ onState, onTranscript, onProvider = () => {}, onAnalyser = () => {}, send, getConversation, fetchImpl = (...args) => globalThis.fetch(...args), mediaDevices = navigator.mediaDevices, Recorder = globalThis.MediaRecorder, Context = globalThis.AudioContext || globalThis.webkitAudioContext, AudioPlayer = globalThis.Audio }) {
+    Object.assign(this, { onState, onTranscript, onProvider, onAnalyser, send, getConversation, fetchImpl, mediaDevices, Recorder, Context, AudioPlayer });
     this.generation = 0; this.captureEpoch = 0; this.active = false; this.muted = false; this.phase = 'idle';
   }
   state(phase, detail = '') { this.phase = phase; this.detail = detail; this.onState({ phase, detail, active: this.active, muted: this.muted, mode: this.mode }); }
@@ -9,7 +10,8 @@ export class VoiceSession {
     this.stop(); this.mode = mode; this.active = true; this.muted = false;
     const generation = this.generation;
     try {
-      if (!this.getConsent()) throw new Error('Activa el permiso de Groq en el chat antes de usar la voz.');
+      // Unlock playback during the explicit Start click, before network requests.
+      if (mode === 'conversation') this.preparePlayback();
       if (!this.mediaDevices?.getUserMedia || !this.Recorder || !this.Context) throw new Error('Tu navegador no admite grabación aquí. Usa Chrome, Edge o Safari actualizado y abre localhost o HTTPS.');
       this.state('connecting', 'Comprobando la configuración…');
       this.request = new AbortController();
@@ -39,6 +41,7 @@ export class VoiceSession {
     if (!this.alive(generation) || this.muted || capture !== this.captureEpoch) return;
     const source = this.context.createMediaStreamSource(stream), analyser = this.context.createAnalyser();
     analyser.fftSize = 1024; source.connect(analyser);
+    this.onAnalyser(analyser, 'input');
     const mime = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'].find(type => this.Recorder.isTypeSupported(type));
     const recorder = new this.Recorder(stream, mime ? { mimeType: mime } : {});
     const chunks = []; this.recorder = recorder;
@@ -80,6 +83,7 @@ export class VoiceSession {
     if (this.recorder) { this.recorder.onstop = null; this.recorder.ondataavailable = null; this.recorder.onerror = null; if (this.recorder.state === 'recording') this.recorder.stop(); this.recorder = null; }
     this.stream?.getTracks().forEach(track => track.stop()); this.stream = null;
     this.context?.close().catch(() => {}); this.context = null;
+    this.onAnalyser(null, 'input');
   }
   async call(route, options, generation) {
     if (!this.alive(generation)) throw new DOMException('Cancelado', 'AbortError');
@@ -93,7 +97,7 @@ export class VoiceSession {
     const response = await this.call('/api/voice/transcribe', { method: 'POST', body: blob, headers: { 'Content-Type': blob.type, 'X-Voice-STT-Provider': this.sttProvider || 'groq' } }, generation);
     const { text } = await response.json();
     if (!this.alive(generation)) return;
-    if (!text?.trim()) { this.state('listening', 'No reconocí palabras. Inténtalo de nuevo.'); if (!this.muted) await this.listen(generation); return; }
+    if (!text?.trim()) { if (this.muted) this.state('muted', 'Micrófono apagado. Actívalo para seguir hablando.'); else await this.listen(generation); return; }
     this.onTranscript(text, this.mode);
     if (this.mode === 'dictate') { this.stop(); return; }
     this.state('thinking', 'Preparando tu respuesta…');
@@ -107,16 +111,35 @@ export class VoiceSession {
     const bytes = await audio.blob();
     if (!this.alive(generation)) return;
     this.audioUrl = URL.createObjectURL(bytes); this.player = new this.AudioPlayer(this.audioUrl);
+    this.connectPlayback();
     this.player.onended = () => this.afterSpeech(generation);
     this.player.onerror = () => this.failure(new Error('No se pudo reproducir la respuesta. Está disponible en el chat.'), generation);
     await this.play(generation);
   }
   async play(generation = this.generation) {
     if (!this.alive(generation) || !this.player) return;
-    try { await this.player.play(); if (this.alive(generation)) this.state('speaking', 'Tu asistente está hablando…'); }
+    try { await Promise.all([this.playbackContext?.resume(), this.player.play()]); if (this.alive(generation)) this.state('speaking', 'Tu asistente está hablando…'); }
     catch { if (this.alive(generation)) this.state('playback', 'Pulsa «Escuchar respuesta» para permitir el audio.'); }
   }
+  preparePlayback() {
+    if (this.playbackContext || !this.Context?.prototype?.createMediaElementSource) return;
+    try { this.playbackContext = new this.Context(); this.playbackContext.resume().catch(() => {}); }
+    catch { this.playbackContext = null; }
+  }
+  connectPlayback() {
+    this.preparePlayback();
+    if (!this.playbackContext) return;
+    try {
+      const source = this.playbackContext.createMediaElementSource(this.player);
+      // Connect sound directly; analysis failures must never suppress the reply.
+      source.connect(this.playbackContext.destination); this.playbackSource = source;
+      const analyser = this.playbackContext.createAnalyser(); analyser.fftSize = 1024;
+      source.connect(analyser); this.onAnalyser(analyser, 'output');
+    } catch { this.onAnalyser(null, 'output'); }
+  }
   releaseAudio() {
+    this.playbackSource?.disconnect(); this.playbackSource = null;
+    this.onAnalyser(null, 'output');
     if (this.player) { this.player.onended = null; this.player.onerror = null; this.player.pause(); this.player.removeAttribute('src'); this.player.load(); this.player = null; }
     if (this.audioUrl) URL.revokeObjectURL(this.audioUrl); this.audioUrl = null;
   }
@@ -136,7 +159,9 @@ export class VoiceSession {
   }
   stop() {
     this.generation++; this.active = false; this.request?.abort(); this.request = null;
-    this.releaseCapture(); this.releaseAudio(); this.state('idle');
+    this.releaseCapture(); this.releaseAudio();
+    this.playbackContext?.close().catch(() => {}); this.playbackContext = null;
+    this.state('idle');
   }
   failure(error, generation) {
     if (!this.alive(generation)) return;
@@ -145,14 +170,17 @@ export class VoiceSession {
   }
 }
 
-export function attachVoice({ send, getConversation, getConsent, onDictation }) {
+export function attachVoice({ send, getConversation, onDictation }) {
   const $ = id => document.getElementById(id), dialog = $('voice-dialog');
   let mode = 'conversation';
-  const session = new VoiceSession({ send, getConversation, getConsent,
+  const visualizer = new AudioVisualizer($('voice-wave'), dialog.querySelector('.voice-orb'));
+  const session = new VoiceSession({ send, getConversation,
+    onAnalyser(analyser, kind) { if (analyser) visualizer.connect(analyser, kind); else visualizer.disconnect(kind); },
     onProvider(provider, type) { const name = provider === 'fish' ? 'Fish Audio' : 'Groq'; $('voice-description').textContent = type === 'dictate' ? `Tu audio se envía a ${name} para transcribirlo. Revisa el texto en el chat antes de enviarlo.` : `Tu audio se transcribe con ${name}; Groq responde en este mismo chat y Fish Audio pone la voz. Haz una pausa para enviar cada mensaje.`; },
     onTranscript(text, type) { $('voice-transcript').textContent = text; if (type === 'dictate') { onDictation(text); dialog.close(); } },
     onState({ phase, detail, active, muted, mode: currentMode }) {
       dialog.dataset.phase = phase;
+      if (['idle', 'error', 'muted'].includes(phase)) visualizer.stop();
       $('voice-status').textContent = detail || (phase === 'idle' ? 'Listo para hablar' : '');
       $('voice-start').hidden = active;
       $('voice-mute').hidden = !active; $('voice-mute').textContent = muted ? 'Activar micrófono' : 'Apagar micrófono'; $('voice-mute').setAttribute('aria-pressed', String(muted));

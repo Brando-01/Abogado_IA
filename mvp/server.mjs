@@ -172,7 +172,6 @@ export function createServer(overrides = {}) {
       if (route === '/api/qa' && req.method === 'POST') {
         const body = await bodyJson(req);
         const question = String(body.question || '').trim();
-        if (body.consent !== true) return fail(res, 400, 'Confirma el envío de la pregunta y extractos a Groq.');
         if (!question || question.length > 1200) return fail(res, 400, 'Escribe una pregunta de hasta 1200 caracteres.');
         if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(question) || /\b\d{8,9}\b/.test(question)) return fail(res, 400, 'Quita correos, DNI y teléfonos de la pregunta antes de enviarla.');
         const history = store.qaTurns(user.id, 4);

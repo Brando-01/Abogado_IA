@@ -182,8 +182,7 @@ test('API completa: cuenta, caso, anexo privado y PDF', async () => {
     assert.equal(register.status, 201);
     const cookie = register.headers.get('set-cookie').split(';')[0];
     const call = (route, method = 'GET', data) => fetch(`${base}${route}`, { method, headers: { Cookie: cookie, ...(data ? { 'Content-Type': 'application/json' } : {}) }, body: data ? JSON.stringify(data) : undefined });
-    assert.equal((await call('/api/qa', 'POST', { question: '¿Qué dice sobre alimentos?' })).status, 400);
-    const qa = await call('/api/qa', 'POST', { question: '¿Qué dice sobre alimentos?', consent: true });
+    const qa = await call('/api/qa', 'POST', { question: '¿Qué dice sobre alimentos?' });
     assert.equal(qa.status, 200);
     assert.equal((await qa.json()).turn.references[0].page, 1);
     assert.equal((await (await call('/api/qa')).json()).turns.length, 1);

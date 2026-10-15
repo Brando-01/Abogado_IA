@@ -6,7 +6,7 @@ import { attachVoice } from './js/voice.js';
 const $ = selector => document.querySelector(selector);
 let current = null, conversations = [], busy = false, setupRequired = false, formats = [], deleteId = null, toastTimer;
 const caseRoute = tail => `/api/cases/${current.case.id}/${tail}`;
-const voice = attachVoice({ send, getConversation: () => current, getConsent: () => $('#ai-consent').checked, onDictation(text) { $('#answer').value = ($('#answer').value.trim() + ' ' + text).trim().slice(0, 4000); resizeComposer(); $('#answer').focus(); toast('Dictado listo. Revisa el texto y pulsa Enviar.'); } });
+const voice = attachVoice({ send, getConversation: () => current, onDictation(text) { $('#answer').value = ($('#answer').value.trim() + ' ' + text).trim().slice(0, 4000); resizeComposer(); $('#answer').focus(); toast('Dictado listo. Revisa el texto y pulsa Enviar.'); } });
 function showError(error) {
   $('#chat-error').textContent = error.message || String(error);
   if (error.status === 401) { $('#workspace').hidden = true; $('#auth-screen').hidden = false; }
@@ -100,7 +100,7 @@ async function send(message = '', action = '', extra = {}) {
   if (message) appendMessage($('#messages'), 'user', message);
   const thinking = appendMessage($('#messages'), 'assistant', 'Un momento…', { engine: 'Asistente' }); thinking.classList.add('thinking'); scrollEnd();
   try {
-    current = await api(`/api/conversations/${current.id}/messages`, { method: 'POST', data: { message, action, consent: $('#ai-consent').checked, ...extra } });
+    current = await api(`/api/conversations/${current.id}/messages`, { method: 'POST', data: { message, action, ...extra } });
     $('#answer').value = ''; $('#answer').rows = 1; resizeComposer();
     await refreshList(); await refreshFormats();
     return current;
@@ -156,7 +156,6 @@ $('#auth-form').addEventListener('submit', async event => {
 $('#composer').addEventListener('submit', event => { event.preventDefault(); const value = $('#answer').value.trim(); if (value) send(value); });
 $('#answer').addEventListener('input', () => { $('#answer').rows = Math.min(5, Math.max(1, $('#answer').value.split('\n').length)); });
 $('#answer').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !matchMedia('(max-width:760px)').matches && !matchMedia('(pointer:coarse)').matches) { event.preventDefault(); $('#composer').requestSubmit(); } });
-$('#ai-consent').addEventListener('change', () => sessionStorage.setItem('abogadoia-ai-consent', String($('#ai-consent').checked)));
 $('#new-conversation').addEventListener('click', () => createConversation().catch(showError));
 $('#conversation-list').addEventListener('click', event => {
   if (busy) return;
@@ -169,7 +168,7 @@ $('#confirm-delete').addEventListener('click', async () => {
   try { await api(`/api/conversations/${deleteId}`, { method: 'DELETE' }); $('#delete-dialog').close(); const wasCurrent = deleteId === current.id; await refreshList(); if (wasCurrent) await openConversation(conversations[0].id); toast('Conversación eliminada.'); }
   catch (error) { showError(error); $('#delete-dialog').close(); }
 });
-$('#logout').addEventListener('click', async () => { if (busy) return; voice.stop(); await api('/api/auth/logout', { method: 'POST' }); sessionStorage.removeItem('abogadoia-ai-consent'); $('#ai-consent').checked = false; closePanels(); $('#workspace').hidden = true; $('#auth-screen').hidden = false; await updateStatus(); });
+$('#logout').addEventListener('click', async () => { if (busy) return; voice.stop(); await api('/api/auth/logout', { method: 'POST' }); closePanels(); $('#workspace').hidden = true; $('#auth-screen').hidden = false; await updateStatus(); });
 $('#menu-button').addEventListener('click', () => { $('#document-panel').hidden = true; $('#sidebar').classList.toggle('open'); $('#menu-button').setAttribute('aria-expanded', String($('#sidebar').classList.contains('open'))); syncBackdrop(); });
 $('#close-sidebar').addEventListener('click', closePanels); $('#panel-backdrop').addEventListener('click', closePanels);
 $('#document-button').addEventListener('click', () => $('#document-panel').hidden ? openDocument() : closePanels());
@@ -206,6 +205,5 @@ $('#source-search').addEventListener('submit', async event => {
 $('#reindex-button').addEventListener('click', async () => { try { await api('/api/reindex', { method: 'POST' }); await updateStatus(); toast('Actualizando la biblioteca.'); } catch (error) { toast(error.message); } });
 window.addEventListener('resize', syncBackdrop);
 document.addEventListener('keydown', event => { if (event.key === 'Escape') closePanels(); });
-$('#ai-consent').checked = sessionStorage.getItem('abogadoia-ai-consent') === 'true';
 try { await updateStatus(); const { user } = await api('/api/auth/me'); if (user) await activate(); } catch (error) { $('#auth-error').textContent = error.message; }
 setInterval(() => updateStatus().catch(() => {}), 15000);

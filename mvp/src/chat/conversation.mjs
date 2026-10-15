@@ -165,7 +165,6 @@ export async function handleConversationMessage(store, userId, conversationId, b
         response = { answer: `La IA no está configurada. Puedo tomar tu texto literalmente como respuesta a «${pending.label}». Confirma que corresponde a ese dato.`,
           proposals: [{ ...state.pending[0], label: pending.label }], actions: actions(['confirm_data', 'Sí, registrar este dato'], ['reject_data', 'Corregir mi mensaje']) };
       } else {
-      if (body.consent !== true) throw failure('Activa el permiso de IA para enviar tu mensaje a Groq. Las respuestas de los botones para el documento se procesan localmente.');
       const safetyStep = pending && ['consent', 'claims', 'risk', 'review'].includes(pending.id);
       const questionLike = /[¿?]/.test(message) || /^(que|como|por que|cuando|donde|cual|explica|dime|cuentame|hola|gracias)\b/.test(text);
       const extractionSteps = item ? allSteps({ ...data, children: Array.from({ length: 5 }, (_, i) => data.children[i] || {}) }) : [];

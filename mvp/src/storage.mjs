@@ -199,11 +199,12 @@ export class Store {
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
-  search(query, limit = 8, categories = null) {
+  search(query, limit = 8, categories = null, { requiredAny = [] } = {}) {
     const stopwords = new Set(['como', 'cual', 'cuales', 'cuando', 'donde', 'para', 'puedo', 'puede', 'debo', 'debe', 'sobre', 'esta', 'este', 'esto', 'esos', 'esas', 'tengo', 'quiero', 'seria', 'seran', 'porque', 'segun', 'una', 'uno', 'unos', 'unas', 'del', 'las', 'los', 'que', 'con', 'por', 'sin']);
     const terms = [...new Set((String(query).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').match(/[a-z0-9]{3,}/g) || []).filter(term => !stopwords.has(term)))].slice(0, 12);
     if (!terms.length) return [];
-    const expression = terms.map(x => `"${x}"`).join(' OR ');
+    const anchors = requiredAny.map(term => String(term).replace(/[^a-z0-9]/g, '')).filter(Boolean).slice(0, 8);
+    const expression = `(${terms.map(x => `"${x}"`).join(' OR ')})${anchors.length ? ` AND (${anchors.map(term => `"${term}"`).join(' OR ')})` : ''}`;
     const filters = Array.isArray(categories) && categories.length ? ` AND s.category IN (${categories.map(() => '?').join(',')})` : '';
     return this.db.prepare(`SELECT s.id source_id,s.title,s.file_name,s.category,c.page,c.content,bm25(chunks_fts) score FROM chunks_fts JOIN legal_chunks c ON c.rowid=chunks_fts.rowid JOIN legal_sources s ON s.id=c.source_id WHERE chunks_fts MATCH ?${filters} ORDER BY score LIMIT ?`).all(expression, ...(categories || []), Math.min(Math.max(Number(limit) || 8, 1), 30));
   }

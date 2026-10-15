@@ -36,6 +36,14 @@ test('una conversación general no necesita citas jurídicas y usa esquema estri
   });
   assert.equal(result.grounding, 'general'); assert.equal(result.engine, 'Groq'); assert.equal(sent.response_format.json_schema.strict, true);
 });
+test('una cita fallida no elimina las afirmaciones comprobadas ni deja pasar la afirmación sin respaldo', async () => {
+  const result = await answerQuestionWithGroq('¿Qué dice la ley de prueba?', [source], [], config, async () => response({ domain: 'legal', sufficient: true, answer: '', claims: [
+    { text: 'La fuente de prueba menciona alimentos.', ref: 'F1', quote: source.content },
+    { text: 'Hay un plazo inventado de 48 horas.', ref: 'F1', quote: 'Una frase que el PDF no contiene.' }
+  ] }));
+  assert.equal(result.grounding, 'evidence_partial'); assert.equal(result.references.length, 1);
+  assert.match(result.answer, /fuente de prueba/); assert.ok(!result.answer.includes('48 horas')); assert.match(result.notice, /Respaldo parcial/);
+});
 test('la extracción de datos rechaza valores que no fueron declarados y no concede consentimientos', async () => {
   const steps = [{ id: 'applicantName', label: 'Nombre' }, { id: 'consent', label: 'Consentimiento' }];
   for (const proposal of [
@@ -119,7 +127,7 @@ test('un único hilo permite consulta, demanda, confirmación, PDF, corrección 
     let chat = (await call('/api/conversations', 'POST', {})).body;
     const conversationId = chat.id;
     const send = async data => { const result = await call(`/api/conversations/${conversationId}/messages`, 'POST', data); assert.equal(result.status, 200, JSON.stringify(result.body)); chat = result.body; return chat; };
-    await send({ message: 'Hola', consent: true });
+    await send({ message: 'Hola' });
     await send({ message: 'Quiero preparar una demanda de divorcio', consent: true });
     assert.equal(chat.case, null);
     await send({ action: 'start_draft' });
