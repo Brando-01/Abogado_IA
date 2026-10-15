@@ -31,6 +31,8 @@ El diseño usa una conversación central, un menú de historial y un panel de do
 
 ## Voz y dictado
 
+El diálogo usa un **personaje Rive original** con estados de escuchar, pensar, hablar, celebrar, silenciado y error. Mueve cabeza y brazos, parpadea y abre la boca siguiendo el audio real de la respuesta. Pulsa **Ver cómo se mueve** para probarlo sin encender el micrófono: se reproduce la última respuesta del chat y no se envía un mensaje nuevo. El archivo animado ya viene en el repositorio; `npm ci` instala su reproductor. Consulta [las fuentes y la recompilación del personaje](animations/assistant/README.md).
+
 En `mvp/.env`, añade tu configuración privada:
 
 ```dotenv
@@ -43,7 +45,7 @@ GROQ_STT_MODEL=whisper-large-v3-turbo
 
 Se admiten también `FISH_API_KEY`, `FISH_VOICE_ID` y `FISH_REFERENCE_ID`. La configuración se vuelve a leer al usar la voz. Por defecto, **Groq transcribe el micrófono** con tu `GROQ_API_KEY` y el modelo `whisper-large-v3-turbo`; **Fish Audio genera la voz** con `s2.1-pro-free` y tu ID. No se usa el servicio ASR de Fish en esta configuración. Los límites o costos de Groq y Fish dependen de sus cuentas y modelos; el modelo Free de Fish para generar voz no convierte su servicio de transcripción en gratuito. Puedes elegir explícitamente `VOICE_STT_PROVIDER=fish` para transcribir con `transcribe-1-pro` si tu cuenta de Fish dispone de crédito de API. No se cambia de proveedor automáticamente ante un error.
 
-- **Voz** abre la animación. Pulsa **Iniciar conversación**, autoriza el micrófono y habla. Después de una pausa de aproximadamente 1,3 segundos se transcribe tu mensaje, se envía al mismo chat y se reproduce la respuesta con tu voz configurada. La esfera y las ondas reaccionan a las muestras reales del micrófono o de la respuesta que se reproduce, mediante Web Audio. Las pausas y los cambios de volumen cambian el movimiento; se respeta la preferencia del sistema de reducir movimiento.
+- **Voz** abre el personaje. Pulsa **Iniciar conversación**, autoriza el micrófono y habla. Después de una pausa de aproximadamente 1,3 segundos se transcribe tu mensaje, se envía al mismo chat y se reproduce la respuesta con tu voz configurada. La máquina de estados de Rive cambia los gestos según el paso de la conversación; Web Audio controla la apertura de la boca con el volumen real de Fish. Cerrar la interacción libera la captura, el audio y la instancia de Rive.
 - **Apagar micrófono** libera la captura; **Activar micrófono** la retoma. **Interrumpir respuesta** detiene la reproducción. **Terminar**, cerrar el diálogo, cambiar de conversación o pasar la aplicación a segundo plano detiene la interacción y libera el micrófono. Una respuesta del chat ya solicitada puede terminar y quedar guardada aunque hayas terminado la voz.
 - El botón de **micrófono** junto a **Voz** permite dictar y pulsar **Usar dictado**. El texto queda en el cuadro de mensaje para revisarlo y enviarlo con el botón habitual.
 - Si el navegador bloquea la reproducción automática, pulsa **Escuchar respuesta**. Si deniega el micrófono, habilítalo en sus permisos.

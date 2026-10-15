@@ -17,7 +17,7 @@ import { makeDraftPdf, makeOfficialFormPreview } from './src/pdf.mjs';
 import { listFormats, getFormat, assessFormat } from './src/formats.mjs';
 
 const publicDir = path.join(PROJECT_ROOT, 'public');
-const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.riv': 'application/octet-stream', '.wasm': 'application/wasm' };
 const loginAttempts = new Map();
 
 function json(res, status, data) {
@@ -71,11 +71,18 @@ export function createServer(overrides = {}) {
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url || '/', `http://${config.host}:${config.port}`), route = url.pathname;
-      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'");
+      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'");
       res.setHeader('Permissions-Policy', 'microphone=(self), camera=()');
       res.setHeader('Referrer-Policy', 'no-referrer');
       res.setHeader('X-Frame-Options', 'DENY');
       if (!['GET', 'HEAD'].includes(req.method) && !validOrigin(req)) return fail(res, 403, 'Origen no autorizado.');
+      const riveVendor = route.match(/^\/vendor\/rive\/(rive\.js|rive\.wasm|rive_fallback\.wasm)$/);
+      if (riveVendor && ['GET', 'HEAD'].includes(req.method)) {
+        const file = path.join(PROJECT_ROOT, 'node_modules', '@rive-app', 'canvas-lite', riveVendor[1]);
+        if (!fs.existsSync(file)) return fail(res, 503, 'Falta el reproductor de Rive. Ejecuta npm ci desde mvp.');
+        res.writeHead(200, { 'Content-Type': mime[path.extname(file)], 'Content-Length': fs.statSync(file).size, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'public, max-age=3600' });
+        return req.method === 'HEAD' ? res.end() : fs.createReadStream(file).pipe(res);
+      }
       if (req.method === 'GET' && route === '/api/health') return json(res, 200, { ok: true });
       if (req.method === 'GET' && route === '/api/status') {
         const groq = currentGroqConfig();

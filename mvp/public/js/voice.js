@@ -1,5 +1,5 @@
 // Audio is kept in memory. A session number invalidates late network/device results.
-import { AudioVisualizer } from './audio-visualizer.js';
+import { RiveAvatar } from './rive-avatar.js';
 export class VoiceSession {
   constructor({ onState, onTranscript, onProvider = () => {}, onAnalyser = () => {}, send, getConversation, fetchImpl = (...args) => globalThis.fetch(...args), mediaDevices = navigator.mediaDevices, Recorder = globalThis.MediaRecorder, Context = globalThis.AudioContext || globalThis.webkitAudioContext, AudioPlayer = globalThis.Audio }) {
     Object.assign(this, { onState, onTranscript, onProvider, onAnalyser, send, getConversation, fetchImpl, mediaDevices, Recorder, Context, AudioPlayer });
@@ -101,11 +101,17 @@ export class VoiceSession {
     this.onTranscript(text, this.mode);
     if (this.mode === 'dictate') { this.stop(); return; }
     this.state('thinking', 'Preparando tu respuesta…');
+    const wasReviewed = this.getConversation()?.case?.data.reviewConfirmed;
     const conversation = await this.send(text);
     if (!this.alive(generation)) return;
     if (!conversation) throw new Error('No se pudo enviar el mensaje. Revisa el chat y vuelve a iniciar la voz.');
+    this.celebrateAfterReply = !wasReviewed && Boolean(conversation.case?.data.reviewConfirmed);
     const turn = conversation.turns.at(-1);
     if (!turn?.answer || this.getConversation()?.id !== conversation.id) { this.stop(); return; }
+    await this.speakTurn(conversation, generation);
+  }
+  async speakTurn(conversation, generation) {
+    const turn = conversation.turns.at(-1);
     this.state('loading', 'Preparando la voz de tu asistente…');
     const audio = await this.call('/api/voice/speech', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId: conversation.id, turnId: turn.id }) }, generation);
     const bytes = await audio.blob();
@@ -116,6 +122,21 @@ export class VoiceSession {
     this.player.onerror = () => this.failure(new Error('No se pudo reproducir la respuesta. Está disponible en el chat.'), generation);
     await this.play(generation);
   }
+  async preview() {
+    this.stop(); this.active = true; this.mode = 'preview';
+    const generation = this.generation;
+    try {
+      const conversation = this.getConversation();
+      if (!conversation?.turns.at(-1)?.answer) throw new Error('Envía primero un mensaje para probar la respuesta por voz.');
+      this.preparePlayback();
+      this.state('listening', 'Así te escucho · prueba sin micrófono');
+      await this.waitPreview(1300); if (!this.alive(generation)) return;
+      this.state('thinking', 'Así preparo tu respuesta…');
+      await this.waitPreview(1100); if (!this.alive(generation)) return;
+      await this.speakTurn(conversation, generation);
+    } catch (error) { this.failure(error, generation); }
+  }
+  waitPreview(ms) { return new Promise(resolve => { this.previewResolve = resolve; this.previewTimer = setTimeout(() => { this.previewResolve = null; resolve(); }, ms); }); }
   async play(generation = this.generation) {
     if (!this.alive(generation) || !this.player) return;
     try { await Promise.all([this.playbackContext?.resume(), this.player.play()]); if (this.alive(generation)) this.state('speaking', 'Tu asistente está hablando…'); }
@@ -146,6 +167,16 @@ export class VoiceSession {
   afterSpeech(generation) {
     this.releaseAudio();
     if (!this.alive(generation)) return;
+    if (this.mode === 'preview' || this.celebrateAfterReply) {
+      this.celebrateAfterReply = false;
+      this.state('celebrating', this.mode === 'preview' ? '¡Listo! Así se mueve tu asistente.' : '¡Resumen confirmado! Puedes revisar tu documento.');
+      this.waitPreview(this.mode === 'preview' ? 1500 : 900).then(() => {
+        if (!this.alive(generation)) return;
+        if (this.mode === 'preview') this.stop();
+        else if (this.muted) this.state('muted', 'Micrófono apagado.');
+        else this.listen(generation).catch(error => this.failure(error, generation));
+      }); return;
+    }
     if (this.muted) this.state('muted', 'Micrófono apagado. Actívalo para seguir hablando.');
     else this.listen(generation).catch(error => this.failure(error, generation));
   }
@@ -159,6 +190,8 @@ export class VoiceSession {
   }
   stop() {
     this.generation++; this.active = false; this.request?.abort(); this.request = null;
+    clearTimeout(this.previewTimer); this.previewResolve?.(); this.previewResolve = null;
+    this.celebrateAfterReply = false;
     this.releaseCapture(); this.releaseAudio();
     this.playbackContext?.close().catch(() => {}); this.playbackContext = null;
     this.state('idle');
@@ -173,17 +206,23 @@ export class VoiceSession {
 export function attachVoice({ send, getConversation, onDictation }) {
   const $ = id => document.getElementById(id), dialog = $('voice-dialog');
   let mode = 'conversation';
-  const visualizer = new AudioVisualizer($('voice-wave'), dialog.querySelector('.voice-orb'));
+  const avatar = new RiveAvatar($('voice-character'), {
+    onReady() { $('voice-character-loading').hidden = true; $('voice-character').hidden = false; },
+    onError() { $('voice-character-loading').textContent = 'El personaje no pudo cargarse. La voz sigue disponible.'; $('voice-character-loading').hidden = false; }
+  });
   const session = new VoiceSession({ send, getConversation,
-    onAnalyser(analyser, kind) { if (analyser) visualizer.connect(analyser, kind); else visualizer.disconnect(kind); },
+    onAnalyser(analyser, kind) { if (analyser) avatar.connect(analyser, kind); else avatar.disconnect(kind); },
     onProvider(provider, type) { const name = provider === 'fish' ? 'Fish Audio' : 'Groq'; $('voice-description').textContent = type === 'dictate' ? `Tu audio se envía a ${name} para transcribirlo. Revisa el texto en el chat antes de enviarlo.` : `Tu audio se transcribe con ${name}; Groq responde en este mismo chat y Fish Audio pone la voz. Haz una pausa para enviar cada mensaje.`; },
     onTranscript(text, type) { $('voice-transcript').textContent = text; if (type === 'dictate') { onDictation(text); dialog.close(); } },
     onState({ phase, detail, active, muted, mode: currentMode }) {
       dialog.dataset.phase = phase;
-      if (['idle', 'error', 'muted'].includes(phase)) visualizer.stop();
+      avatar.setPhase(phase);
+      const labels = { idle: 'LISTO PARA CONVERSAR', connecting: 'CONECTANDO', listening: 'TE ESCUCHO', transcribing: 'ENTENDIENDO TU MENSAJE', thinking: 'PENSANDO', loading: 'PREPARANDO MI VOZ', speaking: 'HABLANDO CONTIGO', playback: 'ESPERANDO REPRODUCCIÓN', muted: 'MICRÓFONO APAGADO', error: 'NECESITO TU AYUDA', celebrating: '¡LISTO!' };
+      $('voice-phase').textContent = labels[phase] || 'TU ASISTENTE';
       $('voice-status').textContent = detail || (phase === 'idle' ? 'Listo para hablar' : '');
       $('voice-start').hidden = active;
-      $('voice-mute').hidden = !active; $('voice-mute').textContent = muted ? 'Activar micrófono' : 'Apagar micrófono'; $('voice-mute').setAttribute('aria-pressed', String(muted));
+      $('voice-mute').hidden = !active || currentMode === 'preview'; $('voice-mute').textContent = muted ? 'Activar micrófono' : 'Apagar micrófono'; $('voice-mute').setAttribute('aria-pressed', String(muted));
+      $('voice-preview').hidden = active || mode !== 'conversation';
       $('voice-finish-dictation').hidden = !(active && currentMode === 'dictate' && phase === 'listening');
       $('voice-interrupt').hidden = !['speaking', 'playback'].includes(phase);
       $('voice-interrupt').textContent = phase === 'playback' ? 'Escuchar respuesta' : 'Interrumpir respuesta';
@@ -196,17 +235,21 @@ export function attachVoice({ send, getConversation, onDictation }) {
     $('voice-description').textContent = type === 'dictate' ? 'Dicta y revisa el texto antes de enviarlo. Al iniciar se indicará si tu audio se transcribe con Groq o Fish Audio.' : 'Conversa en este mismo chat. Groq responde y Fish Audio pone la voz. Al iniciar se indicará si tu audio se transcribe con Groq o Fish Audio.';
     $('voice-start').textContent = type === 'dictate' ? 'Iniciar dictado' : 'Iniciar conversación';
     dialog.showModal();
+    $('voice-character-loading').textContent = 'Preparando a tu asistente…'; $('voice-character-loading').hidden = false;
+    avatar.open();
   }
   $('voice-button').addEventListener('click', () => open('conversation'));
   $('dictate-button').addEventListener('click', () => open('dictate'));
   $('voice-start').addEventListener('click', () => session.start(mode));
+  $('voice-preview').addEventListener('click', () => session.preview());
   $('voice-mute').addEventListener('click', () => session.toggleMute());
   $('voice-finish-dictation').addEventListener('click', () => session.finishRecording());
   $('voice-interrupt').addEventListener('click', () => session.phase === 'playback' ? session.play() : session.interrupt());
-  const end = () => { session.stop(); if (dialog.open) dialog.close(); };
+  const end = () => { session.stop(); avatar.close(); if (dialog.open) dialog.close(); };
   $('voice-end').addEventListener('click', end); $('voice-close').addEventListener('click', end);
-  dialog.addEventListener('cancel', end); dialog.addEventListener('close', () => { if (session.active) session.stop(); });
+  dialog.addEventListener('cancel', end); dialog.addEventListener('close', () => { if (session.active) session.stop(); avatar.close(); });
   window.addEventListener('pagehide', end);
+  window.addEventListener('resize', () => { if (dialog.open) avatar.resize(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) end(); });
   return { stop: end };
 }

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@rive-app/canvas-lite':
+        specifier: 2.44.2
+        version: 2.44.2
       pdf-lib:
         specifier: ^1.17.1
         version: 1.17.1
@@ -98,6 +101,9 @@ packages:
   '@pdf-lib/upng@1.0.1':
     resolution: {integrity: sha512-dQK2FUMQtowVP00mtIksrlZhdFXQZPC+taih1q4CvPZ5vqdxR/LKBaFg0oAfzd1GlHZXXSPdQfzQnt+ViGvEIQ==}
 
+  '@rive-app/canvas-lite@2.44.2':
+    resolution: {integrity: sha512-E5isW6ARdDV642nd+25hYTAO9dpe0xNIEbEsufPYCaRt1tcWZGd+pQnivjYAN2V8VUVp97f56s0jMMsUPHL0nQ==}
+
   pako@1.0.11:
     resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
 
@@ -168,6 +174,8 @@ snapshots:
   '@pdf-lib/upng@1.0.1':
     dependencies:
       pako: 1.0.11
+
+  '@rive-app/canvas-lite@2.44.2': {}
 
   pako@1.0.11: {}
 

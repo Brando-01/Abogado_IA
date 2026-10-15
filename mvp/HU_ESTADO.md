@@ -2,7 +2,7 @@
 
 Fecha de revisión: 2026-10-15. Este registro distingue la función observable de los criterios de aceptación completos. **Parcial** significa que falta al menos una condición del documento. La ejecución actual es un laboratorio local con datos ficticios; ninguna historia implica aprobación jurídica o habilitación para presentar demandas reales.
 
-Función adicional: voz por turnos y dictado en el mismo chat; Groq transcribe y responde, Fish Audio genera la voz. Incluye animación reactiva a las muestras reales del audio, chat directo sin casilla de activación, apagado del micrófono, interrupción de respuesta y cierre. Requiere claves de Groq y Fish, ID de voz, permisos del navegador y HTTPS en celulares remotos. ASR de Fish es opcional y utiliza un crédito distinto del modelo Free de texto a voz. No habilita otros procedimientos ni elimina las confirmaciones del documento. Las pruebas con API real y audio sintético deben distinguirse de la verificación con micrófono físico.
+Función adicional: voz por turnos y dictado en el mismo chat; Groq transcribe y responde, Fish Audio genera la voz. Incluye personaje Rive original con máquina de estados, boca reactiva al audio y prueba sin micrófono, chat directo sin casilla de activación, apagado del micrófono, interrupción de respuesta y cierre. Requiere claves de Groq y Fish, ID de voz, permisos del navegador y HTTPS en celulares remotos. ASR de Fish es opcional y utiliza un crédito distinto del modelo Free de texto a voz. No habilita otros procedimientos ni elimina las confirmaciones del documento. Las pruebas con API real y audio sintético deben distinguirse de la verificación con micrófono físico.
 
 | HU | Estado | Evidencia o pendiente principal |
 |---|---|---|
