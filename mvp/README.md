@@ -103,8 +103,16 @@ El estado de las 40 historias y los pendientes está en [HU_ESTADO.md](HU_ESTADO
 
 ## Verificación
 
+### Seguimiento de consultas y orientación inmediata
+
+El chat conserva el asunto y los hechos declarados en seguimientos breves como «me robaron en la calle» → «con voilenacia», reconoce algunas variantes de escritura y respeta cambios de tema. Las preguntas ya hechas y las respuestas se recuperan del historial de esa conversación; no se usan conversaciones de otro usuario.
+
+Para robo de celular incluye una guía práctica acotada para Perú con enlaces de la PNP, Ministerio del Interior y OSIPTEL: seguridad, central policial, protección de accesos bancarios, bloqueo del equipo y reporte. Está en `src/services/phone-theft-guidance.mjs`, con fecha de revisión **15/10/2026**. Esta guía es local y curada; no consulta internet en cada mensaje y requiere revisión periódica. No depende de Groq ni de tener un PDF penal. Cuando se declara otro país, no aplica teléfonos ni trámites peruanos.
+
+Las preguntas sobre artículos, penas, plazos y requisitos siguen usando el RAG y su control de citas. La guía no agrega normas a los PDF ni habilita la generación de una denuncia penal. La comprensión del lenguaje continúa siendo parcial; estas reglas y pruebas no garantizan cobertura de cualquier redacción o cero errores.
+
 ```powershell
 npm test
 ```
 
-Las pruebas cubren el hilo unificado (consulta → demanda → confirmación → PDF → corrección), aislamiento y cifrado, respaldo ausente o inventado, extracción de datos no declarados, reanudación, anexos y formatos.
+Las pruebas cubren el hilo unificado (consulta → demanda → confirmación → PDF → corrección), aislamiento y cifrado, respaldo ausente o inventado, extracción de datos no declarados, reanudación, anexos y formatos. `tests/consultation.test.mjs` reproduce los tres mensajes del robo, reinicio, negaciones, cambio de tema o país, ausencia de fuentes y enlaces seguros.

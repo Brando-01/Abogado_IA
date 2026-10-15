@@ -4,6 +4,8 @@ Fecha de revisión: 2026-10-15. Este registro distingue la función observable d
 
 Función adicional: voz por turnos y dictado en el mismo chat; Groq transcribe y responde, Fish Audio genera la voz. Incluye personaje Rive original con máquina de estados, boca reactiva al audio y prueba sin micrófono, chat directo sin casilla de activación, apagado del micrófono, interrupción de respuesta y cierre. Requiere claves de Groq y Fish, ID de voz, permisos del navegador y HTTPS en celulares remotos. ASR de Fish es opcional y utiliza un crédito distinto del modelo Free de texto a voz. No habilita otros procedimientos ni elimina las confirmaciones del documento. Las pruebas con API real y audio sintético deben distinguirse de la verificación con micrófono físico.
 
+Consultas: conserva el tema en respuestas breves y algunas erratas, sin convertir un robo de celular en una entrevista de alimentos. Incluye orientación práctica local para ese escenario con páginas oficiales de Perú revisadas el 15/10/2026, enlaces y fecha visibles; no es búsqueda web en vivo ni aprobación jurídica del corpus. Artículos, penas, plazos y requisitos mantienen la exigencia de respaldo local. Faltan cobertura lingüística amplia, revisión periódica de esa guía y validación jurídica de otros asuntos.
+
 | HU | Estado | Evidencia o pendiente principal |
 |---|---|---|
 | 01 Alcance y límites | Parcial | Aviso visible y confirmación de datos ficticios; falta consentimiento informado y política aprobada. |

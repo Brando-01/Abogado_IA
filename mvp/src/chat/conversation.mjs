@@ -179,7 +179,7 @@ export async function handleConversationMessage(store, userId, conversationId, b
         response = { answer: 'Entendí estos datos de tu mensaje. Revísalos antes de incorporarlos al documento:', proposals: state.pending.map(proposal => ({ ...proposal, label: allSteps(preview).find(step => step.id === proposal.stepId)?.label })),
           engine: 'Groq', model: config.groqModel, actions: actions(['confirm_data', 'Sí, registrar estos datos'], ['reject_data', 'Corregir mi mensaje']) };
       } else {
-        const history = conversation.turns.filter(turn => turn.engine === 'Groq' || turn.grounding).slice(-6).map(turn => ({ ...turn, question: redactKnown(turn.question, data), answer: redactKnown(turn.answer, data) }));
+        const history = conversation.turns.filter(turn => turn.question).map(turn => ({ ...turn, question: redactKnown(turn.question, data), answer: redactKnown(turn.answer, data) }));
         response = await askLibrary(store, redactKnown(message, data), history, config, fetchImpl);
         if (state.pending?.length) response.actions = actions(['resume_draft', 'Revisar datos pendientes'], ['show_document', 'Mi documento']);
         else if (item) response.actions = actions(['resume_draft', 'Seguir con el documento'], ['show_document', 'Mi documento']);
