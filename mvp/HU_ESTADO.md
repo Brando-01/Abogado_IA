@@ -30,7 +30,7 @@ Consultas: conserva el tema en respuestas breves y algunas erratas, sin converti
 | 20 Referencias normativas | Pendiente | No inserta artículo y URL verificados en el escrito. |
 | 21 Vigencia aprobada | Parcial | No utiliza fragmentos como autoridad aprobada; falta flujo de vigencia y bloqueo administrable. |
 | 22 Borrador estructurado | Parcial | Genera objeto de borrador con datos declarados; falta esquema jurídico completo aprobado. |
-| 23 Plantilla estable | Parcial | PDF local y dos versiones oficiales diferenciadas; falta publicación y aprobación de plantillas. |
+| 23 Plantilla estable | Parcial | PDF local y dos versiones oficiales diferenciadas. La vista superpuesta dibuja hasta tres menores y puede abreviar textos; falta adaptar los casos de cuatro o cinco menores sin omisiones, además de publicación y aprobación de plantillas. |
 | 24 Vista previa completa | Parcial | Borrador visible y PDF de referencia descargable; falta previsualización completa antes de descargar. |
 | 25 Editar desde vista previa | Parcial | Se corrige desde el resumen y se regenera; falta edición directa en una vista completa. |
 | 26 PDF legible | Implementada para simulación | PDF A4 y vista previa sobre formulario oficial, con marca de no presentación. |

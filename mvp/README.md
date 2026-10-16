@@ -19,7 +19,7 @@ La clave se lee solo en el servidor, se actualiza al editar `.env` y está exclu
 ## Cómo usar el chat
 
 - Crea la cuenta inicial o inicia sesión. Las conversaciones anteriores y los casos se importan a la nueva estructura al primer acceso.
-- Escribe y envía directamente: no hay una casilla que activar. Al enviar, Groq procesa el mensaje y los extractos recuperados. Un aviso breve identifica ese uso. La respuesta muestra si proviene de Groq o de un control local.
+- Escribe y envía directamente: no hay una casilla que activar. Las consultas que usan IA envían a Groq el mensaje y los extractos recuperados que correspondan. Las confirmaciones, validaciones y algunas guías acotadas se resuelven localmente. La respuesta identifica su origen.
 - Escribe una pregunta general o jurídica. En respuestas jurídicas, abre **Ver respaldo** para leer las citas literales y abrir el PDF original en su página.
 - Pulsa **Preparar una demanda** o solicita un documento en el chat. Primero se aclara el asunto y se confirma explícitamente **alimentos para menores** antes de crear el caso. Preguntas como «cómo procedo si me robaron el celular» siguen siendo consultas; mencionar «demanda» no activa una entrevista de alimentos. La preparación requiere datos ficticios.
 - Puedes declarar varios datos en un mensaje. Groq propone los campos y el servidor comprueba que cada valor proceda literalmente del mensaje; los incorpora solo después de que confirmes la propuesta. Las opciones de sí/no, los montos y fechas simples se validan localmente.
@@ -80,6 +80,8 @@ src/chat/conversation.mjs   Conversación, acciones y confirmación de datos
 src/chat/workflow.mjs       Preguntas y validación del formulario
 src/services/rag.mjs        Recuperación de contexto desde FTS5
 src/services/groq-chat.mjs  Prompts, esquema JSON y comprobación de respaldo
+src/services/legal-query.mjs Asunto y hechos en seguimientos de una consulta
+src/services/phone-theft-guidance.mjs Guía práctica local con páginas oficiales
 src/storage.mjs             SQLite, cifrado y aislamiento por usuario
 src/ingest.mjs              Extracción e indexación de los PDF
 src/procedure.mjs           Evaluación del caso y borrador determinista
@@ -99,17 +101,25 @@ Para trasladar los datos, detén el servidor y copia `private/` completo de form
 
 Los anexos admiten PDF, PNG y JPEG de hasta 5 MB, con comprobación básica de firma; falta antivirus. El piloto admite hasta cinco menores, exige confirmación del resumen y bloquea supuestos fuera del alcance, pretensiones acumuladas, urgencia y personas adultas. El PDF usa únicamente datos declarados y lleva **SIMULACIÓN - NO PRESENTAR**. Los formatos disponibles corresponden a dos versiones del Poder Judicial para alimentos de menores; su canal, competencia y adaptación requieren revisión. No hay presentación automática.
 
+La vista con datos superpuestos sobre el formulario oficial es parcial: actualmente dibuja hasta tres menores y puede abreviar los textos largos para ajustarlos a los campos. El caso admite hasta cinco menores, pero la vista oficial requiere adaptación para cuatro o cinco sin omisiones. El borrador narrativo y esa vista son salidas diferentes; ninguna constituye una presentación judicial.
+
 El estado de las 40 historias y los pendientes está en [HU_ESTADO.md](HU_ESTADO.md). La aplicación no está habilitada para expedientes reales ni exposición pública: siguen pendientes aprobación jurídica de normas y plantillas, protección de datos, retención, antivirus, auditoría por documento, seguridad y HTTPS.
 
-## Verificación
-
-### Seguimiento de consultas y orientación inmediata
+## Seguimiento de consultas y orientación inmediata
 
 El chat conserva el asunto y los hechos declarados en seguimientos breves como «me robaron en la calle» → «con voilenacia», reconoce algunas variantes de escritura y respeta cambios de tema. Las preguntas ya hechas y las respuestas se recuperan del historial de esa conversación; no se usan conversaciones de otro usuario.
 
 Para robo de celular incluye una guía práctica acotada para Perú con enlaces de la PNP, Ministerio del Interior y OSIPTEL: seguridad, central policial, protección de accesos bancarios, bloqueo del equipo y reporte. Está en `src/services/phone-theft-guidance.mjs`, con fecha de revisión **15/10/2026**. Esta guía es local y curada; no consulta internet en cada mensaje y requiere revisión periódica. No depende de Groq ni de tener un PDF penal. Cuando se declara otro país, no aplica teléfonos ni trámites peruanos.
 
 Las preguntas sobre artículos, penas, plazos y requisitos siguen usando el RAG y su control de citas. La guía no agrega normas a los PDF ni habilita la generación de una denuncia penal. La comprensión del lenguaje continúa siendo parcial; estas reglas y pruebas no garantizan cobertura de cualquier redacción o cero errores.
+
+## Presentación ante el Poder Judicial: propuesta futura
+
+El autocompletado mediante una API propia y Playwright **no está implementado**. La propuesta es ejecutar un navegador en el servidor y ofrecer una vista interactiva para que la persona pueda continuar desde computadora o celular, revisar datos, completar autenticación, CAPTCHA y firma cuando correspondan, y realizar el envío final. Falta validar el recorrido en un portal y distrito judicial concretos. No se han presentado demandas ni se ha confirmado una integración oficial disponible para el proyecto.
+
+No hace falta instalar Playwright para ejecutar esta versión. El resultado de la comprobación pública y el alcance de la propuesta se documentan en [el README principal](../README.md#integración-propuesta-con-el-poder-judicial).
+
+## Verificación
 
 ```powershell
 npm test
